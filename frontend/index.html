@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Predição em Lote - Upload de Modelo</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f6f9;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            text-align: center;
+            max-width: 400px;
+            width: 100%;
+        }
+        h2 { color: #0078d4; margin-bottom: 20px; }
+        input[type="file"] { margin: 20px 0; width: 100%; }
+        button {
+            background-color: #0078d4;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            font-size: 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
+            font-weight: bold;
+        }
+        button:hover { background-color: #005a9e; }
+        #resultado {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+            background-color: #f0f0f0;
+            white-space: pre-wrap;
+            text-align: left;
+            font-family: monospace;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Predição de Modelos (.xlsx)</h2>
+    <p>Selecione sua planilha Excel para processamento em lote:</p>
+    
+    <form id="uploadForm">
+        <input type="file" id="excelFile" accept=".xlsx" required />
+        <button type="submit" id="btnEnviar">Enviar para Azure Function</button>
+    </form>
+
+    <div id="resultado"></div>
+</div>
+
+<script>
+    document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const btn = document.getElementById('btnEnviar');
+        const resultadoDiv = document.getElementById('resultado');
+        const fileInput = document.getElementById('excelFile');
+        
+        btn.innerText = "Processando predições...";
+        btn.disabled = true;
+        resultadoDiv.style.display = "none";
+
+        // Cria o formulário HTTP carregando o arquivo físico
+        const formData = new FormData();
+        formData.append('file', fileInput.files[0]);
+
+        try {
+            // O SWA mapeia sua API automaticamente para a rota relativa /api/
+            // Substitua 'azure_function_ex01' pelo nome exato da sua rota se for diferente
+            const resposta = await fetch('/api/azure_function_ex01', {
+                method: 'POST',
+                body: formData
+            });
+
+            const textoResposta = await resposta.text();
+            
+            resultadoDiv.innerText = textoResposta;
+            resultadoDiv.style.backgroundColor = resposta.ok ? "#e1f5fe" : "#ffebee";
+            resultadoDiv.style.display = "block";
+        } catch (erro) {
+            resultadoDiv.innerText = "Erro ao conectar com a Azure Function: " + erro.message;
+            resultadoDiv.style.display = "block";
+            resultadoDiv.style.backgroundColor = "#ffebee";
+        } finally {
+            btn.innerText = "Enviar para Azure Function";
+            btn.disabled = false;
+        }
+    });
+</script>
+
+</body>
+</html>
