@@ -1,107 +1,492 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Predição em Lote - Upload de Modelo</title>
-    <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f4f6f9;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-        }
-        .container {
-            background-color: white;
-            padding: 30px;
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-            text-align: center;
-            max-width: 400px;
-            width: 100%;
-        }
-        h2 { color: #0078d4; margin-bottom: 20px; }
-        input[type="file"] { margin: 20px 0; width: 100%; }
-        button {
-            background-color: #0078d4;
-            color: white;
-            border: none;
-            padding: 12px 20px;
-            font-size: 16px;
-            border-radius: 4px;
-            cursor: pointer;
-            width: 100%;
-            font-weight: bold;
-        }
-        button:hover { background-color: #005a9e; }
-        #resultado {
-            margin-top: 20px;
-            padding: 15px;
-            border-radius: 4px;
-            background-color: #f0f0f0;
-            white-space: pre-wrap;
-            text-align: left;
-            font-family: monospace;
-            display: none;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Jurisprudência</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --paper: #f3f5f5;
+      --surface: #ffffff;
+      --ink: #0f1c20;
+      --muted: #5a6a70;
+      --line: #dde3e4;
+      --accent: #0b7a86;
+      --accent-ink: #064e56;
+      --accent-soft: #e0f1f2;
+      --mark: #ffe58a;
+      --side: #0c1b1f;
+      --side-text: #a9bcc0;
+      --sans: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+      --serif: "Newsreader", Georgia, "Times New Roman", serif;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; }
+    body {
+      font-family: var(--sans);
+      font-size: 15px;
+      line-height: 1.5;
+      color: var(--ink);
+      background: var(--paper);
+      -webkit-font-smoothing: antialiased;
+    }
+    button, input, textarea { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+
+    /* ---------- Estrutura ---------- */
+    .app { display: grid; grid-template-columns: 232px 1fr; height: 100vh; }
+
+    .side {
+      background: var(--side);
+      color: var(--side-text);
+      display: flex;
+      flex-direction: column;
+      padding: 22px 14px 18px;
+    }
+    .logo { display: flex; align-items: center; gap: 10px; color: #fff; font-weight: 600; font-size: 16px; padding: 0 8px 26px; }
+    .mark {
+      width: 30px; height: 30px; border-radius: 9px; background: var(--accent);
+      display: grid; place-items: center;
+      font-family: var(--serif); font-size: 20px; font-weight: 600; line-height: 1;
+    }
+    .side nav { display: flex; flex-direction: column; gap: 2px; }
+    .side nav button {
+      display: flex; align-items: center; gap: 12px;
+      background: none; border: 0; border-radius: 10px;
+      color: inherit; text-align: left; padding: 10px 12px;
+      transition: background .15s, color .15s;
+    }
+    .side nav button:hover { background: rgba(255,255,255,.06); color: #fff; }
+    .side nav button.active { background: rgba(255,255,255,.1); color: #fff; font-weight: 500; }
+    .side-foot { margin-top: auto; display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 0 8px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #3ec9a7; flex-shrink: 0; }
+
+    main { min-width: 0; height: 100vh; }
+    .screen { display: none; flex-direction: column; height: 100%; padding: 28px 40px 0; overflow: hidden; }
+    .screen.active { display: flex; }
+    .screen.scroll { overflow: auto; padding-bottom: 48px; }
+
+    .page-head h1 { font-size: 28px; line-height: 1.2; font-weight: 600; letter-spacing: -.02em; margin: 0; }
+    .page-head p { margin: 6px 0 0; color: var(--muted); max-width: 62ch; }
+
+    /* ---------- Busca (tela 1) ---------- */
+    .searchbar {
+      display: flex; align-items: center; gap: 10px;
+      margin-top: 22px; padding: 6px 6px 6px 16px;
+      background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .searchbar:focus-within { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
+    .searchbar svg { color: var(--muted); }
+    .searchbar input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; padding: 10px 0; font-size: 16px; }
+    .searchbar input::placeholder { color: #8a979c; }
+
+    .btn {
+      background: var(--accent); color: #fff; border: 0; border-radius: 9px;
+      padding: 10px 20px; font-weight: 500; transition: background .15s;
+    }
+    .btn:hover { background: var(--accent-ink); }
+    .btn.ghost { background: var(--surface); color: var(--ink); border: 1px solid var(--line); }
+    .btn.ghost:hover { background: var(--paper); }
+
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+    .chip {
+      background: var(--surface); border: 1px solid var(--line); border-radius: 999px;
+      padding: 5px 14px; font-size: 14px; color: var(--muted);
+      transition: background .15s, border-color .15s, color .15s;
+    }
+    .chip:hover { border-color: #b9c6c8; color: var(--ink); }
+    .chip[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); font-weight: 500; }
+
+    .results-bar { margin: 20px 0 12px; font-weight: 500; }
+    .results-bar span { color: var(--muted); font-weight: 400; }
+
+    /* ---------- Lista + leitura ---------- */
+    .split {
+      flex: 1; min-height: 0; padding-bottom: 24px;
+      display: grid; grid-template-columns: minmax(300px, 400px) minmax(0, 1fr);
+      grid-template-rows: minmax(0, 1fr); gap: 16px;
+    }
+    .list {
+      list-style: none; margin: 0; padding: 0;
+      background: var(--surface); border: 1px solid var(--line); border-radius: 16px;
+      overflow: auto;
+    }
+    .list li + li { border-top: 1px solid var(--line); }
+    .item {
+      --ring-bg: var(--surface);
+      display: block; width: 100%; text-align: left;
+      background: none; border: 0; padding: 16px 18px 16px 20px;
+      position: relative; transition: background .15s;
+    }
+    .item:hover { background: #f8fafa; }
+    .item[aria-current="true"] { background: var(--accent-soft); --ring-bg: var(--accent-soft); }
+    .item[aria-current="true"]::before {
+      content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--accent);
+    }
+    .item-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; min-height: 22px; }
+    .badge {
+      display: inline-block; font-size: 12.5px; font-weight: 500;
+      color: var(--accent-ink); background: var(--accent-soft);
+      border-radius: 6px; padding: 2px 8px;
+    }
+    .item[aria-current="true"] .badge { background: #fff; }
+    .item-tese {
+      margin: 0 0 8px; font-size: 14.5px; line-height: 1.5;
+      display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .item-proc { font-size: 13px; color: var(--muted); }
+
+    .ring {
+      --p: 0;
+      position: relative; width: 40px; height: 40px; border-radius: 50%;
+      background: conic-gradient(var(--accent) calc(var(--p) * 1%), var(--line) 0);
+      display: grid; place-items: center; flex-shrink: 0;
+    }
+    .ring::before { content: ""; position: absolute; inset: 4px; border-radius: 50%; background: var(--ring-bg, var(--surface)); }
+    .ring span { position: relative; font-size: 11.5px; font-weight: 600; }
+
+    mark { background: var(--mark); color: inherit; border-radius: 3px; padding: 0 1px; }
+
+    .reader {
+      background: var(--surface); border: 1px solid var(--line); border-radius: 16px;
+      padding: 28px 36px 36px; overflow: auto;
+    }
+    .reader > * { max-width: 70ch; }
+    .reader .back { display: none; background: none; border: 0; color: var(--accent-ink); padding: 0; margin-bottom: 16px; font-weight: 500; }
+    .reader h2 { font-size: 24px; line-height: 1.25; font-weight: 600; letter-spacing: -.015em; margin: 12px 0 14px; }
+    .sim-line { margin-left: 10px; font-size: 13.5px; color: var(--muted); }
+    .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px 24px; margin: 0 0 8px; padding-bottom: 22px; border-bottom: 1px solid var(--line); max-width: none; }
+    .facts dt { font-size: 13px; color: var(--muted); }
+    .facts dd { margin: 0; font-weight: 500; }
+    .reader h3 { font-size: 14px; font-weight: 600; color: var(--muted); margin: 26px 0 8px; }
+    .tese { font-family: var(--serif); font-size: 21px; line-height: 1.5; margin: 0; padding-left: 18px; border-left: 3px solid var(--accent); }
+    .tema { font-family: var(--serif); font-size: 17.5px; line-height: 1.65; margin: 0; }
+    .ai { margin-top: 28px; padding: 16px 18px; border-radius: 12px; background: var(--paper); }
+    .ai h3 { margin-top: 0; display: flex; align-items: center; gap: 8px; color: var(--accent-ink); }
+    .ai p { margin: 0 0 8px; }
+    .ai small { color: var(--muted); }
+
+    /* ---------- Busca por descrição (tela 2) ---------- */
+    .composer {
+      margin-top: 22px; background: var(--surface);
+      border: 1px solid var(--line); border-radius: 16px;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .composer:focus-within { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
+    .composer textarea {
+      display: block; width: 100%; min-height: 96px; resize: none;
+      border: 0; outline: 0; background: none;
+      padding: 16px 18px 6px; font-size: 16px; line-height: 1.55;
+    }
+    .composer textarea::placeholder { color: #8a979c; }
+    .composer-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 8px 10px 10px 18px; }
+    .seg { display: inline-flex; align-items: center; gap: 10px; font-size: 14px; color: var(--muted); }
+    .seg-opts { display: inline-flex; background: var(--paper); border-radius: 9px; padding: 3px; }
+    .seg-opts button { background: none; border: 0; border-radius: 7px; padding: 4px 12px; color: var(--muted); }
+    .seg-opts button[aria-checked="true"] { background: var(--surface); color: var(--ink); font-weight: 500; box-shadow: 0 1px 2px rgba(15,28,32,.12); }
+
+    /* ---------- Sobre (tela 3) ---------- */
+    .about { max-width: 780px; }
+    .specs { margin: 26px 0 0; border-top: 1px solid var(--line); }
+    .specs > div { display: grid; grid-template-columns: 240px 1fr; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+    .specs dt { color: var(--muted); }
+    .specs dd { margin: 0; font-weight: 500; }
+    .todo { color: #8a979c; font-weight: 400; font-style: italic; }
+    .about h2 { font-size: 18px; font-weight: 600; letter-spacing: -.01em; margin: 40px 0 14px; }
+    .flow { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; counter-reset: step; }
+    .flow li { counter-increment: step; padding-top: 14px; border-top: 2px solid var(--ink); }
+    .flow li::before { content: counter(step); display: block; font-family: var(--serif); font-size: 26px; font-weight: 500; line-height: 1; margin-bottom: 8px; color: var(--accent); }
+    .flow strong { display: block; margin-bottom: 4px; }
+    .flow p { margin: 0; color: var(--muted); font-size: 14.5px; }
+    .update { display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 20px 22px; }
+    .update p { margin: 2px 0 0; color: var(--muted); }
+    .update strong { font-size: 16px; }
+    .status { display: block; margin-top: 12px; color: var(--muted); font-size: 14px; }
+
+    /* ---------- Responsivo ---------- */
+    @media (max-width: 900px) {
+      .app { display: block; height: auto; }
+      main, .screen { height: auto; }
+      .screen, .screen.scroll { padding: 20px 16px 96px; overflow: visible; }
+      .side {
+        position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+        flex-direction: row; padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+      }
+      .logo, .side-foot { display: none; }
+      .side nav { flex-direction: row; width: 100%; }
+      .side nav button { flex: 1; flex-direction: column; gap: 2px; font-size: 12px; padding: 8px 4px; text-align: center; }
+      .split { display: block; padding-bottom: 0; }
+      .list { overflow: visible; }
+      .reader { padding: 22px 20px 28px; overflow: visible; }
+      .reader .back { display: inline-block; }
+      .split:not(.open) .reader { display: none; }
+      .split.open .list { display: none; }
+      .page-head h1 { font-size: 24px; }
+      .specs > div { grid-template-columns: 1fr; gap: 2px; }
+      .flow { grid-template-columns: 1fr; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      * { transition: none !important; }
+    }
+  </style>
 </head>
 <body>
+<div class="app">
 
-<div class="container">
-    <h2>Predição de Modelos (.xlsx)</h2>
-    <p>Selecione sua planilha Excel para processamento em lote:</p>
-    
-    <form id="uploadForm">
-        <input type="file" id="excelFile" accept=".xlsx" required />
-        <button type="submit" id="btnEnviar">Enviar para Azure Function</button>
-    </form>
+  <aside class="side">
+    <div class="logo"><span class="mark" aria-hidden="true">§</span><span>Jurisprudência</span></div>
+    <nav aria-label="Navegação principal">
+      <button class="active" data-target="tela1">
+        <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg>
+        <span>Buscar julgados</span>
+      </button>
+      <button data-target="tela2">
+        <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6.5A2.5 2.5 0 0 1 7.5 4h9A2.5 2.5 0 0 1 19 6.5v6a2.5 2.5 0 0 1-2.5 2.5H11l-4 3.5V15h-.0A2.5 2.5 0 0 1 5 12.5z"/><path d="M9 8.5h6M9 11.5h3.5"/></svg>
+        <span>Buscar por descrição</span>
+      </button>
+      <button data-target="tela3">
+        <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5M12 8h.01"/></svg>
+        <span>Sobre a base</span>
+      </button>
+    </nav>
+    <div class="side-foot"><span class="dot"></span><span>Base atualizada em --/--/----</span></div>
+  </aside>
 
-    <div id="resultado"></div>
+  <main>
+
+    <!-- ============ TELA 1: BUSCA POR FILTROS ============ -->
+    <section id="tela1" class="screen active">
+      <header class="page-head">
+        <h1>Buscar julgados</h1>
+        <p>Procure por palavras do tema e filtre pelo ramo do direito.</p>
+      </header>
+
+      <form class="searchbar" onsubmit="return false">
+        <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg>
+        <input id="q1" type="search" value="ITCD" placeholder="Termos do tema, como ITCD ou base de cálculo" aria-label="Termos do tema">
+        <button class="btn" type="submit">Filtrar</button>
+      </form>
+
+      <div class="chips" role="group" aria-label="Ramo do direito">
+        <button class="chip" aria-pressed="true">Direito Tributário</button>
+        <button class="chip" aria-pressed="false">Direito Administrativo</button>
+        <button class="chip" aria-pressed="false">Direito Civil</button>
+        <button class="chip" aria-pressed="false">Direito Constitucional</button>
+        <button class="chip" aria-pressed="false">Direito do Consumidor</button>
+        <button class="chip" aria-pressed="false">Direito Penal</button>
+        <button class="chip" aria-pressed="false">Direito Processual Civil</button>
+        <button class="chip" aria-pressed="false">Direito Processual Penal</button>
+      </div>
+
+      <div class="results-bar">77 julgados encontrados</div>
+
+      <div class="split" id="split1">
+        <ul class="list" id="list1"></ul>
+        <article class="reader" id="reader1" aria-live="polite"></article>
+      </div>
+    </section>
+
+    <!-- ============ TELA 2: BUSCA POR DESCRIÇÃO ============ -->
+    <section id="tela2" class="screen">
+      <header class="page-head">
+        <h1>Buscar por descrição</h1>
+        <p>Conte com suas palavras o que você procura. Os julgados mais próximos do sentido do texto aparecem primeiro.</p>
+      </header>
+
+      <div class="composer">
+        <textarea id="q2" rows="3" aria-label="Descrição do que você procura" placeholder="Exemplo: o Fisco pode rever o valor declarado das quotas de uma empresa quando ela recebe imóveis em herança?"></textarea>
+        <div class="composer-foot">
+          <div class="seg" role="radiogroup" aria-label="Quantidade de resultados">
+            <span>Mostrar</span>
+            <div class="seg-opts">
+              <button role="radio" aria-checked="false">5</button>
+              <button role="radio" aria-checked="true">10</button>
+              <button role="radio" aria-checked="false">20</button>
+              <button role="radio" aria-checked="false">50</button>
+            </div>
+            <span>resultados</span>
+          </div>
+          <button class="btn" type="button">Buscar julgados</button>
+        </div>
+      </div>
+
+      <div class="results-bar">10 julgados mais próximos da sua descrição</div>
+
+      <div class="split" id="split2">
+        <ul class="list" id="list2"></ul>
+        <article class="reader" id="reader2" aria-live="polite"></article>
+      </div>
+    </section>
+
+    <!-- ============ TELA 3: SOBRE A BASE ============ -->
+    <section id="tela3" class="screen scroll">
+      <div class="about">
+        <header class="page-head">
+          <h1>Sobre a base</h1>
+          <p>De onde vêm os dados, como a busca funciona e como atualizar a base.</p>
+        </header>
+
+        <dl class="specs">
+          <div><dt>Última atualização</dt><dd>--/--/---- às --:--</dd></div>
+          <div><dt>Julgados na base</dt><dd>---</dd></div>
+          <div><dt>Fonte dos dados</dt><dd class="todo">A definir, por exemplo o Informativo de Jurisprudência do STJ</dd></div>
+          <div><dt>IA que escreve os resumos</dt><dd class="todo">A definir</dd></div>
+          <div><dt>IA da busca por descrição</dt><dd class="todo">A definir</dd></div>
+          <div><dt>Versão do app</dt><dd>0.1, protótipo</dd></div>
+        </dl>
+
+        <h2>Como funciona</h2>
+        <ol class="flow">
+          <li><strong>Coleta</strong><p>O app consulta a fonte e traz os julgados novos com tese, tema e processo.</p></li>
+          <li><strong>Resumo e indexação</strong><p>A IA resume cada julgado e registra o sentido do texto para permitir a busca por descrição.</p></li>
+          <li><strong>Busca</strong><p>Na primeira tela, filtros exatos. Na segunda, ordem por proximidade de sentido.</p></li>
+        </ol>
+
+        <h2>Atualizar a base</h2>
+        <div class="update">
+          <div>
+            <strong>Verificar novos julgados</strong>
+            <p>Confere a fonte e adiciona o que ainda não está na base.</p>
+          </div>
+          <button class="btn" id="btn-update" type="button">Verificar agora</button>
+        </div>
+        <output class="status" id="status">Nenhuma verificação feita nesta sessão.</output>
+      </div>
+    </section>
+
+  </main>
 </div>
 
 <script>
-    document.getElementById('uploadForm').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        
-        const btn = document.getElementById('btnEnviar');
-        const resultadoDiv = document.getElementById('resultado');
-        const fileInput = document.getElementById('excelFile');
-        
-        btn.innerText = "Processando predições...";
-        btn.disabled = true;
-        resultadoDiv.style.display = "none";
+  /* ---------- Dados de exemplo ---------- */
+  const ITEMS = [
+    {
+      ramo: 'Direito Tributário', orgao: 'STJ, Segunda Turma',
+      processo: 'REsp 2.139.412-MT', relator: 'Min. Francisco Falcão',
+      julgado: '18/2/2025', publicado: '21/2/2025 (DJEN)',
+      tese: 'Para apurar a base de cálculo do ITCD, o Fisco pode desconsiderar o valor declarado pelo contribuinte com base no patrimônio líquido da sociedade, quando verificar que os bens imóveis utilizados para integralização de quotas não tiveram seus valores de mercado apurados isoladamente na data do fato gerador.',
+      tema: 'Imposto sobre Transmissão Causa Mortis (ITCD). Base de cálculo. Patrimônio de sociedade integralizado com bens imóveis. Afastamento do valor declarado pelo contribuinte. Necessidade de apuração do valor de mercado de cada imóvel.',
+      resumo: 'O Fisco só pode afastar o valor declarado das quotas e usar o patrimônio líquido da empresa se os imóveis integralizados não tiveram o valor de mercado apurado um a um na data do fato gerador. (Texto de exemplo)',
+      sim: 92
+    },
+    {
+      ramo: 'Direito Tributário', orgao: 'STJ, Primeira Seção',
+      processo: 'REsp 0.000.000-XX (exemplo)', relator: 'Min. Nome do Relator',
+      julgado: '00/00/0000', publicado: '00/00/0000',
+      tese: 'Exemplo de tese. Aqui aparece o texto completo da tese do julgado; na lista ele é cortado em três linhas e, no painel de leitura, é exibido por inteiro.',
+      tema: 'Exemplo de tema. Termos como ITCD podem aparecer destacados quando coincidem com a busca. Texto longo do tema do julgado.',
+      resumo: 'Texto do resumo gerado por IA aparecerá aqui.',
+      sim: 81
+    },
+    {
+      ramo: 'Direito Civil', orgao: 'STJ, Terceira Turma',
+      processo: 'REsp 0.000.001-XX (exemplo)', relator: 'Min. Nome do Relator',
+      julgado: '00/00/0000', publicado: '00/00/0000',
+      tese: 'Exemplo de tese de outro ramo do direito, para mostrar como a lista se comporta com registros diferentes.',
+      tema: 'Exemplo de tema. Texto longo do tema do julgado.',
+      resumo: 'Texto do resumo gerado por IA aparecerá aqui.',
+      sim: 73
+    },
+    {
+      ramo: 'Direito Administrativo', orgao: 'STJ, Primeira Turma',
+      processo: 'REsp 0.000.002-XX (exemplo)', relator: 'Min. Nome do Relator',
+      julgado: '00/00/0000', publicado: '00/00/0000',
+      tese: 'Exemplo de tese. Quarto registro de demonstração.',
+      tema: 'Exemplo de tema. Texto longo do tema do julgado.',
+      resumo: 'Texto do resumo gerado por IA aparecerá aqui.',
+      sim: 66
+    }
+  ];
 
-        // Cria o formulário HTTP carregando o arquivo físico
-        const formData = new FormData();
-        formData.append('file', fileInput.files[0]);
+  const isMobile = () => window.matchMedia('(max-width: 900px)').matches;
+  const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-        try {
-            // O SWA mapeia sua API automaticamente para a rota relativa /api/
-            // Substitua 'azure_function_ex01' pelo nome exato da sua rota se for diferente
-            const resposta = await fetch('/api/azure_function_ex01', {
-                method: 'POST',
-                body: formData
-            });
+  function mount(prefix, { showSim, term }) {
+    const list = document.getElementById('list' + prefix);
+    const reader = document.getElementById('reader' + prefix);
+    const split = document.getElementById('split' + prefix);
 
-            const textoResposta = await resposta.text();
-            
-            resultadoDiv.innerText = textoResposta;
-            resultadoDiv.style.backgroundColor = resposta.ok ? "#e1f5fe" : "#ffebee";
-            resultadoDiv.style.display = "block";
-        } catch (erro) {
-            resultadoDiv.innerText = "Erro ao conectar com a Azure Function: " + erro.message;
-            resultadoDiv.style.display = "block";
-            resultadoDiv.style.backgroundColor = "#ffebee";
-        } finally {
-            btn.innerText = "Enviar para Azure Function";
-            btn.disabled = false;
-        }
+    const hl = text => {
+      if (!term) return text;
+      return text.replace(new RegExp('(' + esc(term) + ')', 'gi'), '<mark>$1</mark>');
+    };
+    const ring = p => `<span class="ring" style="--p:${p}" aria-label="${p}% de similaridade"><span>${p}%</span></span>`;
+
+    list.innerHTML = ITEMS.map((it, i) => `
+      <li><button class="item" data-i="${i}">
+        <div class="item-top"><span class="badge">${it.ramo}</span>${showSim ? ring(it.sim) : ''}</div>
+        <p class="item-tese">${hl(it.tese)}</p>
+        <span class="item-proc">${it.processo}</span>
+      </button></li>`).join('');
+
+    function select(i, open) {
+      const it = ITEMS[i];
+      list.querySelectorAll('.item').forEach((b, n) => b.setAttribute('aria-current', n === i ? 'true' : 'false'));
+      reader.innerHTML = `
+        <button class="back" type="button">‹ Voltar à lista</button>
+        <span class="badge">${it.ramo}</span>${showSim ? `<span class="sim-line">${it.sim}% de proximidade com a sua descrição</span>` : ''}
+        <h2>${it.processo}</h2>
+        <dl class="facts">
+          <div><dt>Órgão julgador</dt><dd>${it.orgao}</dd></div>
+          <div><dt>Relator</dt><dd>${it.relator}</dd></div>
+          <div><dt>Julgamento</dt><dd>${it.julgado}</dd></div>
+          <div><dt>Publicação</dt><dd>${it.publicado}</dd></div>
+        </dl>
+        <h3>Tese</h3>
+        <p class="tese">${hl(it.tese)}</p>
+        <h3>Tema</h3>
+        <p class="tema">${hl(it.tema)}</p>
+        <section class="ai">
+          <h3>Resumo gerado por IA</h3>
+          <p>${it.resumo}</p>
+          <small>Modelo: a definir. Gerado em: --/--/----.</small>
+        </section>`;
+      split.classList.toggle('open', !!open);
+      reader.scrollTop = 0;
+      if (open) window.scrollTo(0, 0);
+    }
+
+    list.addEventListener('click', e => {
+      const b = e.target.closest('.item');
+      if (b) select(+b.dataset.i, true);
     });
-</script>
+    reader.addEventListener('click', e => {
+      if (e.target.closest('.back')) { split.classList.remove('open'); window.scrollTo(0, 0); }
+    });
 
+    if (!isMobile()) select(0, false);
+  }
+
+  mount('1', { showSim: false, term: 'ITCD' });
+  mount('2', { showSim: true, term: '' });
+
+  /* ---------- Navegação ---------- */
+  const navButtons = document.querySelectorAll('.side nav button');
+  const screens = document.querySelectorAll('.screen');
+  navButtons.forEach(btn => btn.addEventListener('click', () => {
+    navButtons.forEach(b => b.classList.toggle('active', b === btn));
+    screens.forEach(s => s.classList.toggle('active', s.id === btn.dataset.target));
+    window.scrollTo(0, 0);
+  }));
+
+  /* ---------- Filtros e opções (apenas visual) ---------- */
+  document.querySelectorAll('.chip').forEach(c => c.addEventListener('click', () =>
+    c.setAttribute('aria-pressed', c.getAttribute('aria-pressed') !== 'true')));
+
+  document.querySelectorAll('.seg-opts button').forEach(b => b.addEventListener('click', () => {
+    b.parentElement.querySelectorAll('button').forEach(o => o.setAttribute('aria-checked', o === b));
+  }));
+
+  document.getElementById('btn-update').addEventListener('click', () => {
+    document.getElementById('status').textContent =
+      'Ainda não conectado. Quando estiver pronto, o andamento da verificação aparece aqui.';
+  });
+</script>
 </body>
 </html>
