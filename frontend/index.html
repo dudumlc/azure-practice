@@ -209,6 +209,25 @@
     .update strong { font-size: 16px; }
     .status { display: block; margin-top: 12px; color: var(--muted); font-size: 14px; }
 
+
+    /* ---------- Acréscimos da versão conectada ---------- */
+    .badges { display: flex; flex-wrap: wrap; gap: 6px; }
+    .item-top .badges { flex: 1; min-width: 0; }
+    .badge.more { background: var(--paper); color: var(--muted); }
+    .item-proc { display: block; }
+    .chips-toggle { background: none; border: 0; color: var(--accent-ink); font-weight: 500; padding: 5px 6px; }
+    .state { padding: 28px 22px; color: var(--muted); text-align: center; }
+    .state.err { color: #9a2b2b; }
+    .more-wrap { padding: 14px; text-align: center; border-top: 1px solid var(--line); }
+    .reader .proc { font-size: 14px; color: var(--muted); margin: 0; }
+    .reader details { margin-top: 26px; border-top: 1px solid var(--line); padding-top: 14px; }
+    .reader summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--muted); }
+    .reader details p { font-family: var(--serif); font-size: 16.5px; line-height: 1.65; margin: 12px 0 0; white-space: pre-line; }
+    .reader .facts a { color: var(--accent-ink); }
+    .soon { margin-top: 28px; padding: 28px; background: var(--surface); border: 1px dashed #b9c6c8; border-radius: 16px; color: var(--muted); max-width: 70ch; }
+    .soon strong { display: block; color: var(--ink); margin-bottom: 4px; }
+    .composer.off { opacity: .55; pointer-events: none; }
+
     /* ---------- Responsivo ---------- */
     @media (max-width: 900px) {
       .app { display: block; height: auto; }
@@ -255,7 +274,7 @@
         <span>Sobre a base</span>
       </button>
     </nav>
-    <div class="side-foot"><span class="dot"></span><span>Base atualizada em --/--/----</span></div>
+    <div class="side-foot"><span class="dot"></span><span id="foot-data">Base atualizada em --/--/----</span></div>
   </aside>
 
   <main>
@@ -267,24 +286,15 @@
         <p>Procure por palavras do tema e filtre pelo ramo do direito.</p>
       </header>
 
-      <form class="searchbar" onsubmit="return false">
+      <form class="searchbar" id="form1">
         <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg>
-        <input id="q1" type="search" value="ITCD" placeholder="Termos do tema, como ITCD ou base de cálculo" aria-label="Termos do tema">
+        <input id="q1" type="search" placeholder="Termos do tema, como ITCD ou base de cálculo" aria-label="Termos do tema" autocomplete="off">
         <button class="btn" type="submit">Filtrar</button>
       </form>
 
-      <div class="chips" role="group" aria-label="Ramo do direito">
-        <button class="chip" aria-pressed="true">Direito Tributário</button>
-        <button class="chip" aria-pressed="false">Direito Administrativo</button>
-        <button class="chip" aria-pressed="false">Direito Civil</button>
-        <button class="chip" aria-pressed="false">Direito Constitucional</button>
-        <button class="chip" aria-pressed="false">Direito do Consumidor</button>
-        <button class="chip" aria-pressed="false">Direito Penal</button>
-        <button class="chip" aria-pressed="false">Direito Processual Civil</button>
-        <button class="chip" aria-pressed="false">Direito Processual Penal</button>
-      </div>
+      <div class="chips" id="chips1" role="group" aria-label="Ramo do direito"></div>
 
-      <div class="results-bar">77 julgados encontrados</div>
+      <div class="results-bar" id="bar1" aria-live="polite">Carregando…</div>
 
       <div class="split" id="split1">
         <ul class="list" id="list1"></ul>
@@ -299,28 +309,14 @@
         <p>Conte com suas palavras o que você procura. Os julgados mais próximos do sentido do texto aparecem primeiro.</p>
       </header>
 
-      <div class="composer">
-        <textarea id="q2" rows="3" aria-label="Descrição do que você procura" placeholder="Exemplo: o Fisco pode rever o valor declarado das quotas de uma empresa quando ela recebe imóveis em herança?"></textarea>
-        <div class="composer-foot">
-          <div class="seg" role="radiogroup" aria-label="Quantidade de resultados">
-            <span>Mostrar</span>
-            <div class="seg-opts">
-              <button role="radio" aria-checked="false">5</button>
-              <button role="radio" aria-checked="true">10</button>
-              <button role="radio" aria-checked="false">20</button>
-              <button role="radio" aria-checked="false">50</button>
-            </div>
-            <span>resultados</span>
-          </div>
-          <button class="btn" type="button">Buscar julgados</button>
-        </div>
+      <div class="composer off" aria-hidden="true">
+        <textarea rows="3" tabindex="-1" disabled placeholder="Exemplo: o Fisco pode rever o valor declarado das quotas de uma empresa quando ela recebe imóveis em herança?"></textarea>
+        <div class="composer-foot"><span></span><button class="btn" type="button" tabindex="-1" disabled>Buscar julgados</button></div>
       </div>
 
-      <div class="results-bar">10 julgados mais próximos da sua descrição</div>
-
-      <div class="split" id="split2">
-        <ul class="list" id="list2"></ul>
-        <article class="reader" id="reader2" aria-live="polite"></article>
+      <div class="soon">
+        <strong>Disponível em uma próxima etapa</strong>
+        Esta busca depende da IA que compara o sentido do texto. Por enquanto, use a busca por filtros na primeira tela.
       </div>
     </section>
 
@@ -333,19 +329,20 @@
         </header>
 
         <dl class="specs">
-          <div><dt>Última atualização</dt><dd>--/--/---- às --:--</dd></div>
-          <div><dt>Julgados na base</dt><dd>---</dd></div>
-          <div><dt>Fonte dos dados</dt><dd class="todo">STJ - https://processo.stj.jus.br/jurisprudencia/externo/informativo/</dd></div>
-          <div><dt>IA que escreve os resumos</dt><dd class="todo">A definir</dd></div>
-          <div><dt>IA da busca por descrição</dt><dd class="todo">A definir</dd></div>
-          <div><dt>Versão do app</dt><dd>0.0.1</dd></div>
+          <div><dt>Última atualização</dt><dd id="m-atualizado">...</dd></div>
+          <div><dt>Última verificação</dt><dd id="m-verificado">...</dd></div>
+          <div><dt>Julgados na base</dt><dd id="m-total">...</dd></div>
+          <div><dt>Edições na base</dt><dd id="m-edicoes">...</dd></div>
+          <div><dt>Fonte dos dados</dt><dd id="m-fonte">...</dd></div>
+          <div><dt>IA</dt><dd id="m-ia">...</dd></div>
+          <div><dt>Versão do app</dt><dd>0.2, busca por filtros</dd></div>
         </dl>
 
         <h2>Como funciona</h2>
         <ol class="flow">
           <li><strong>Coleta</strong><p>O app consulta a fonte e traz os julgados novos com tese, tema e processo.</p></li>
-          <li><strong>Resumo e indexação</strong><p>A IA resume cada julgado e registra o sentido do texto para permitir a busca por descrição.</p></li>
-          <li><strong>Busca</strong><p>Na primeira tela, filtros exatos. Na segunda, ordem por proximidade de sentido.</p></li>
+          <li><strong>Resumo e indexação</strong><p>Em uma próxima etapa, a IA resume cada julgado e registra o sentido do texto para permitir a busca por descrição.</p></li>
+          <li><strong>Busca</strong><p>Na primeira tela, filtros por ramo e palavras do tema. A busca por proximidade de sentido virá depois.</p></li>
         </ol>
 
         <h2>Atualizar a base</h2>
@@ -364,107 +361,211 @@
 </div>
 
 <script>
-  /* ---------- Dados de exemplo ---------- */
-  const ITEMS = [
-    {
-      ramo: 'Direito Tributário', orgao: 'STJ, Segunda Turma',
-      processo: 'REsp 2.139.412-MT', relator: 'Min. Francisco Falcão',
-      julgado: '18/2/2025', publicado: '21/2/2025 (DJEN)',
-      tese: 'Para apurar a base de cálculo do ITCD, o Fisco pode desconsiderar o valor declarado pelo contribuinte com base no patrimônio líquido da sociedade, quando verificar que os bens imóveis utilizados para integralização de quotas não tiveram seus valores de mercado apurados isoladamente na data do fato gerador.',
-      tema: 'Imposto sobre Transmissão Causa Mortis (ITCD). Base de cálculo. Patrimônio de sociedade integralizado com bens imóveis. Afastamento do valor declarado pelo contribuinte. Necessidade de apuração do valor de mercado de cada imóvel.',
-      resumo: 'O Fisco só pode afastar o valor declarado das quotas e usar o patrimônio líquido da empresa se os imóveis integralizados não tiveram o valor de mercado apurado um a um na data do fato gerador. (Texto de exemplo)',
-      sim: 92
-    },
-    {
-      ramo: 'Direito Tributário', orgao: 'STJ, Primeira Seção',
-      processo: 'REsp 0.000.000-XX (exemplo)', relator: 'Min. Nome do Relator',
-      julgado: '00/00/0000', publicado: '00/00/0000',
-      tese: 'Exemplo de tese. Aqui aparece o texto completo da tese do julgado; na lista ele é cortado em três linhas e, no painel de leitura, é exibido por inteiro.',
-      tema: 'Exemplo de tema. Termos como ITCD podem aparecer destacados quando coincidem com a busca. Texto longo do tema do julgado.',
-      resumo: 'Texto do resumo gerado por IA aparecerá aqui.',
-      sim: 81
-    },
-    {
-      ramo: 'Direito Civil', orgao: 'STJ, Terceira Turma',
-      processo: 'REsp 0.000.001-XX (exemplo)', relator: 'Min. Nome do Relator',
-      julgado: '00/00/0000', publicado: '00/00/0000',
-      tese: 'Exemplo de tese de outro ramo do direito, para mostrar como a lista se comporta com registros diferentes.',
-      tema: 'Exemplo de tema. Texto longo do tema do julgado.',
-      resumo: 'Texto do resumo gerado por IA aparecerá aqui.',
-      sim: 73
-    },
-    {
-      ramo: 'Direito Administrativo', orgao: 'STJ, Primeira Turma',
-      processo: 'REsp 0.000.002-XX (exemplo)', relator: 'Min. Nome do Relator',
-      julgado: '00/00/0000', publicado: '00/00/0000',
-      tese: 'Exemplo de tese. Quarto registro de demonstração.',
-      tema: 'Exemplo de tema. Texto longo do tema do julgado.',
-      resumo: 'Texto do resumo gerado por IA aparecerá aqui.',
-      sim: 66
-    }
-  ];
+  const API = '/api';
+  const TAMANHO = 20;
+  const CHIPS_VISIVEIS = 10;
 
   const isMobile = () => window.matchMedia('(max-width: 900px)').matches;
-  const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const $ = id => document.getElementById(id);
+  const html = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-  function mount(prefix, { showSim, term }) {
-    const list = document.getElementById('list' + prefix);
-    const reader = document.getElementById('reader' + prefix);
-    const split = document.getElementById('split' + prefix);
+  /* "DIREITO DO CONSUMIDOR" -> "Direito do Consumidor" (o valor enviado à API continua o original) */
+  const MINUSCULAS = new Set(['de', 'do', 'da', 'dos', 'das', 'e']);
+  const titulo = s => s.toLowerCase().split(' ')
+    .map((w, i) => (i > 0 && MINUSCULAS.has(w)) ? w : w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 
-    const hl = text => {
-      if (!term) return text;
-      return text.replace(new RegExp('(' + esc(term) + ')', 'gi'), '<mark>$1</mark>');
-    };
-    const ring = p => `<span class="ring" style="--p:${p}" aria-label="${p}% de similaridade"><span>${p}%</span></span>`;
+  /* Sem acento e minúsculo, mantendo o mesmo tamanho do texto (para marcar o trecho no texto original) */
+  const dobrar = t => Array.from(t, ch => {
+    const b = ch.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+    return b.length === 1 ? b : ch;
+  }).join('');
 
-    list.innerHTML = ITEMS.map((it, i) => `
-      <li><button class="item" data-i="${i}">
-        <div class="item-top"><span class="badge">${it.ramo}</span>${showSim ? ring(it.sim) : ''}</div>
-        <p class="item-tese">${hl(it.tese)}</p>
-        <span class="item-proc">${it.processo}</span>
-      </button></li>`).join('');
-
-    function select(i, open) {
-      const it = ITEMS[i];
-      list.querySelectorAll('.item').forEach((b, n) => b.setAttribute('aria-current', n === i ? 'true' : 'false'));
-      reader.innerHTML = `
-        <button class="back" type="button">‹ Voltar à lista</button>
-        <span class="badge">${it.ramo}</span>${showSim ? `<span class="sim-line">${it.sim}% de proximidade com a sua descrição</span>` : ''}
-        <h2>${it.processo}</h2>
-        <dl class="facts">
-          <div><dt>Órgão julgador</dt><dd>${it.orgao}</dd></div>
-          <div><dt>Relator</dt><dd>${it.relator}</dd></div>
-          <div><dt>Julgamento</dt><dd>${it.julgado}</dd></div>
-          <div><dt>Publicação</dt><dd>${it.publicado}</dd></div>
-        </dl>
-        <h3>Tese</h3>
-        <p class="tese">${hl(it.tese)}</p>
-        <h3>Tema</h3>
-        <p class="tema">${hl(it.tema)}</p>
-        <section class="ai">
-          <h3>Resumo gerado por IA</h3>
-          <p>${it.resumo}</p>
-          <small>Modelo: a definir. Gerado em: --/--/----.</small>
-        </section>`;
-      split.classList.toggle('open', !!open);
-      reader.scrollTop = 0;
-      if (open) window.scrollTo(0, 0);
-    }
-
-    list.addEventListener('click', e => {
-      const b = e.target.closest('.item');
-      if (b) select(+b.dataset.i, true);
+  function destacar(texto, palavras) {
+    texto = String(texto ?? '');
+    if (!palavras.length) return html(texto);
+    const dob = dobrar(texto), faixas = [];
+    palavras.forEach(p => {
+      for (let i = dob.indexOf(p); i !== -1; i = dob.indexOf(p, i + p.length)) faixas.push([i, i + p.length]);
     });
-    reader.addEventListener('click', e => {
-      if (e.target.closest('.back')) { split.classList.remove('open'); window.scrollTo(0, 0); }
+    faixas.sort((x, y) => x[0] - y[0]);
+    const uni = [];
+    faixas.forEach(f => {
+      const ult = uni[uni.length - 1];
+      if (ult && f[0] <= ult[1]) ult[1] = Math.max(ult[1], f[1]); else uni.push([...f]);
     });
-
-    if (!isMobile()) select(0, false);
+    let saida = '', pos = 0;
+    uni.forEach(([ini, fim]) => {
+      saida += html(texto.slice(pos, ini)) + '<mark>' + html(texto.slice(ini, fim)) + '</mark>';
+      pos = fim;
+    });
+    return saida + html(texto.slice(pos));
   }
 
-  mount('1', { showSim: false, term: 'ITCD' });
-  mount('2', { showSim: true, term: '' });
+  async function chamar(caminho, params) {
+    const url = API + caminho + (params ? '?' + new URLSearchParams(params) : '');
+    const r = await fetch(url);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  }
+
+  /* ---------- Dados do processo (lidos do texto do campo "processo") ---------- */
+  const RE_ORGAO = /(Corte Especial|(?:Primeira|Segunda|Terceira|Quarta|Quinta|Sexta) (?:Turma|Seção))/;
+  function dadosProcesso(p) {
+    const principal = /,\s*Rel\./.test(p) ? p.split(/,\s*Rel\./)[0].trim() : p.slice(0, 80);
+    return {
+      principal,
+      relator: (p.match(/Rel\.\s+(?:Min(?:istr[oa]|\.)\s+)?([^,]+)/) || [])[1] || '',
+      orgao: (p.match(RE_ORGAO) || [])[1] || '',
+      julgamento: (p.match(/julgado em (\d{1,2}\/\d{1,2}\/\d{4})/) || [])[1] || ''
+    };
+  }
+
+  /* ---------- Tela 1 ---------- */
+  const S = { ramos: new Set(), palavras: [], termo: '', pagina: 1, total: 0, itens: [], sel: -1, token: 0, completos: new Map(), todosRamos: [], verTodos: false };
+  const list = $('list1'), reader = $('reader1'), split = $('split1'), bar = $('bar1');
+
+  function desenharChips() {
+    const visiveis = S.verTodos ? S.todosRamos : S.todosRamos.slice(0, CHIPS_VISIVEIS);
+    const marcados = S.todosRamos.filter(r => S.ramos.has(r.ramo) && !visiveis.includes(r));
+    $('chips1').innerHTML = [...visiveis, ...marcados].map(r =>
+      `<button type="button" class="chip" data-ramo="${html(r.ramo)}" aria-pressed="${S.ramos.has(r.ramo)}">${html(titulo(r.ramo))}</button>`).join('')
+      + (S.todosRamos.length > CHIPS_VISIVEIS
+        ? `<button type="button" class="chips-toggle" id="chips-toggle">${S.verTodos ? 'Mostrar menos' : 'Ver todos (' + S.todosRamos.length + ')'}</button>` : '');
+  }
+
+  function desenharLista() {
+    if (!S.itens.length) { list.innerHTML = ''; return; }
+    list.innerHTML = S.itens.map((it, i) => {
+      const extra = it.ramos.length > 1 ? `<span class="badge more">+${it.ramos.length - 1}</span>` : '';
+      return `<li><button class="item" data-i="${i}" aria-current="${i === S.sel}">
+        <div class="item-top"><span class="badges"><span class="badge">${html(titulo(it.ramos[0] || ''))}</span>${extra}</span></div>
+        <p class="item-tese">${destacar(it.destaque || it.tema, S.palavras)}</p>
+        <span class="item-proc">${html(dadosProcesso(it.processo).principal)} · Informativo ${html(it.edicao)}</span>
+      </button></li>`;
+    }).join('') + (S.itens.length < S.total
+      ? `<li class="more-wrap"><button class="btn ghost" type="button" id="mais">Carregar mais</button></li>` : '');
+  }
+
+  function mensagem(texto, erro) {
+    list.innerHTML = `<li class="state${erro ? ' err' : ''}">${html(texto)}</li>`;
+    reader.innerHTML = '';
+  }
+
+  async function buscar(reiniciar) {
+    const meu = ++S.token;
+    if (reiniciar) {
+      S.pagina = 1; S.itens = []; S.sel = -1; S.total = 0;
+      S.termo = $('q1').value.trim();
+      S.palavras = dobrar(S.termo).split(/\s+/).filter(Boolean);
+      split.classList.remove('open');
+      bar.textContent = 'Buscando…';
+      mensagem('Buscando…');
+    }
+    try {
+      const dados = await chamar('/julgados', { ramos: [...S.ramos].join('|'), q: S.termo, pagina: S.pagina, tamanho: TAMANHO });
+      if (meu !== S.token) return;
+      S.total = dados.total;
+      S.itens = S.itens.concat(dados.itens);
+      bar.innerHTML = `${S.total.toLocaleString('pt-BR')} julgado${S.total === 1 ? '' : 's'} encontrado${S.total === 1 ? '' : 's'}`
+        + (S.itens.length < S.total ? ` <span>(mostrando ${S.itens.length})</span>` : '');
+      if (!S.itens.length) return mensagem('Nenhum julgado encontrado. Tente menos palavras ou outro ramo.');
+      desenharLista();
+      if (reiniciar && !isMobile()) selecionar(0, false);
+    } catch (e) {
+      if (meu !== S.token) return;
+      bar.textContent = 'Erro na busca';
+      mensagem('Não foi possível consultar a base agora. Tente de novo em instantes.', true);
+    }
+  }
+
+  function leitor(it, teor) {
+    const d = dadosProcesso(it.processo);
+    const fato = (rotulo, valor) => valor ? `<div><dt>${rotulo}</dt><dd>${valor}</dd></div>` : '';
+    const link = it.link ? `<a href="${html(it.link)}" target="_blank" rel="noopener">Informativo ${html(it.edicao)}</a>` : html(it.edicao);
+    return `
+      <button class="back" type="button">‹ Voltar à lista</button>
+      <div class="badges">${it.ramos.map(r => `<span class="badge">${html(titulo(r))}</span>`).join('')}</div>
+      <h2>${html(d.principal)}</h2>
+      <dl class="facts">
+        ${fato('Órgão julgador', html(d.orgao))}${fato('Relator', html(d.relator))}${fato('Julgamento', html(d.julgamento))}${fato('Publicado em', link)}
+      </dl>
+      ${it.destaque ? `<h3>Tese</h3><p class="tese">${destacar(it.destaque, S.palavras)}</p>` : ''}
+      <h3>Tema</h3>
+      <p class="tema">${destacar(it.tema, S.palavras)}</p>
+      <h3>Processo</h3>
+      <p class="proc">${html(it.processo)}</p>
+      ${it.resumo_ia ? `<section class="ai"><h3>Resumo gerado por IA</h3><p>${html(it.resumo_ia)}</p></section>` : ''}
+      <div id="teor-slot">${teor === undefined ? '<details><summary>Carregando inteiro teor…</summary></details>'
+        : teor ? `<details><summary>Informações do inteiro teor</summary><p>${destacar(teor, S.palavras)}</p></details>` : ''}</div>`;
+  }
+
+  async function selecionar(i, abrir) {
+    const it = S.itens[i];
+    if (!it) return;
+    S.sel = i;
+    list.querySelectorAll('.item').forEach(b => b.setAttribute('aria-current', +b.dataset.i === i));
+    const chave = it.edicao + '/' + it.id;
+    reader.innerHTML = leitor(it, S.completos.has(chave) ? S.completos.get(chave) : undefined);
+    split.classList.toggle('open', !!abrir);
+    reader.scrollTop = 0;
+    if (abrir) window.scrollTo(0, 0);
+    if (S.completos.has(chave)) return;
+    try {
+      const completo = await chamar('/julgados/' + encodeURIComponent(it.edicao) + '/' + encodeURIComponent(it.id));
+      S.completos.set(chave, completo.inteiro_teor || '');
+    } catch (e) { S.completos.set(chave, ''); }
+    if (S.sel === i) {
+      const slot = $('teor-slot');
+      if (slot) slot.innerHTML = S.completos.get(chave)
+        ? `<details><summary>Informações do inteiro teor</summary><p>${destacar(S.completos.get(chave), S.palavras)}</p></details>` : '';
+    }
+  }
+
+  list.addEventListener('click', e => {
+    if (e.target.closest('#mais')) { S.pagina++; buscar(false); return; }
+    const b = e.target.closest('.item');
+    if (b) selecionar(+b.dataset.i, true);
+  });
+  reader.addEventListener('click', e => {
+    if (e.target.closest('.back')) { split.classList.remove('open'); window.scrollTo(0, 0); }
+  });
+  $('form1').addEventListener('submit', e => { e.preventDefault(); buscar(true); });
+  $('chips1').addEventListener('click', e => {
+    if (e.target.closest('#chips-toggle')) { S.verTodos = !S.verTodos; desenharChips(); return; }
+    const c = e.target.closest('.chip');
+    if (!c) return;
+    const r = c.dataset.ramo;
+    S.ramos.has(r) ? S.ramos.delete(r) : S.ramos.add(r);
+    c.setAttribute('aria-pressed', S.ramos.has(r));
+    buscar(true);
+  });
+
+  async function iniciar() {
+    buscar(true);
+    try {
+      S.todosRamos = await chamar('/ramos');
+      desenharChips();
+    } catch (e) { $('chips1').innerHTML = ''; }
+  }
+
+  /* ---------- Tela 3: sobre a base ---------- */
+  const dataHora = iso => new Date(iso).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).replace(',', ' às');
+  const soData = iso => new Date(iso).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+
+  async function carregarMeta() {
+    try {
+      const m = await chamar('/meta');
+      $('m-atualizado').textContent = dataHora(m.atualizado_em);
+      $('m-verificado').textContent = dataHora(m.ultima_verificacao);
+      $('m-total').textContent = m.total_julgados.toLocaleString('pt-BR');
+      $('m-edicoes').textContent = `${m.total_edicoes} (até o Informativo ${m.ultima_edicao})`;
+      $('m-fonte').textContent = m.fonte;
+      $('m-ia').textContent = m.modelos ? [].concat(m.modelos).join(', ') : 'Não utilizada nesta versão';
+      $('foot-data').textContent = 'Base atualizada em ' + soData(m.atualizado_em);
+    } catch (e) {
+      ['m-atualizado', 'm-verificado', 'm-total', 'm-edicoes', 'm-fonte', 'm-ia'].forEach(id => $(id).textContent = 'Indisponível no momento');
+    }
+  }
 
   /* ---------- Navegação ---------- */
   const navButtons = document.querySelectorAll('.side nav button');
@@ -475,18 +576,13 @@
     window.scrollTo(0, 0);
   }));
 
-  /* ---------- Filtros e opções (apenas visual) ---------- */
-  document.querySelectorAll('.chip').forEach(c => c.addEventListener('click', () =>
-    c.setAttribute('aria-pressed', c.getAttribute('aria-pressed') !== 'true')));
-
-  document.querySelectorAll('.seg-opts button').forEach(b => b.addEventListener('click', () => {
-    b.parentElement.querySelectorAll('button').forEach(o => o.setAttribute('aria-checked', o === b));
-  }));
-
-  document.getElementById('btn-update').addEventListener('click', () => {
-    document.getElementById('status').textContent =
-      'Ainda não conectado. Quando estiver pronto, o andamento da verificação aparece aqui.';
+  $('btn-update').addEventListener('click', () => {
+    $('status').textContent = 'Ainda não conectado. Quando estiver pronto, o andamento da verificação aparece aqui.';
   });
+
+  iniciar();
+  carregarMeta();
 </script>
+
 </body>
 </html>
