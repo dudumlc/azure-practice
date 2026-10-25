@@ -4,8 +4,9 @@ Monta os documentos do Cosmos DB a partir dos blocos extraídos dos informativos
 Sem dependência de pandas nem de Azure: é usado tanto pela carga local (Excel) quanto,
 mais adiante, pela Function de ingestão (PDF baixado em memória).
 
+Avisos do informativo (nota excluída, destaque alterado, errata) são ignorados: ver eh_aviso().
 Um "bloco" é o dict que o extrator devolve:
-    PROCESSO, RAMO_DO_DIREITO (texto, ramos separados por vírgula), TEMA, DESTAQUE, INTEIRO_TEOR, OBS
+    PROCESSO, RAMO_DO_DIREITO (texto, ramos separados por vírgula), SECAO, TEMA, DESTAQUE, INTEIRO_TEOR, OBS
 """
 import hashlib
 import re
@@ -34,26 +35,43 @@ def edicao_do_arquivo(arquivo):
     return arquivo[3:-4]
 
 
+def ramos_do_bloco(bloco):
+    ramos = []
+    for r in str(bloco["RAMO_DO_DIREITO"]).split(","):
+        r = r.strip()
+        if r and r not in ramos:
+            ramos.append(r)
+    return ramos
+
+
+def eh_aviso(bloco):
+    """Aviso do próprio informativo ("nota excluída", "destaque alterado", errata), não um julgado.
+
+    Esses blocos não têm RAMO DO DIREITO e também lhes falta o TEMA ou o DESTAQUE. Já um julgado de
+    verdade sem ramo (existem alguns) tem TEMA e DESTAQUE e entra na base.
+    """
+    return not ramos_do_bloco(bloco) and not (bloco["TEMA"].strip() and bloco["DESTAQUE"].strip())
+
+
 def montar_docs(edicao, blocos):
     """Blocos de UMA edição -> lista de documentos. Ids estáveis (não dependem do TEMA)."""
     ocorrencias = {}
     docs = []
     for b in blocos:
         proc = b["PROCESSO"].strip()
+        if eh_aviso(b):
+            continue
+        ramos = ramos_do_bloco(b)
+        tema, destaque = b["TEMA"].strip(), b["DESTAQUE"].strip()
         principal = processo_principal(proc)
         n = ocorrencias.get(principal, 0) + 1
         ocorrencias[principal] = n
-        ramos = []
-        for r in str(b["RAMO_DO_DIREITO"]).split(","):
-            r = r.strip()
-            if r and r not in ramos:
-                ramos.append(r)
-        tema, destaque = b["TEMA"].strip(), b["DESTAQUE"].strip()
         docs.append({
             "id": hashlib.sha1(f"{edicao}|{principal}|{n}".encode()).hexdigest()[:16],
             "edicao": edicao,
             "processo_principal": principal,
             "processo": proc,
+            "secao": str(b.get("SECAO", "")).strip(),
             "ramos": ramos,
             "tema": tema,
             "destaque": destaque,

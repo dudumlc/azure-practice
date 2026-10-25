@@ -25,7 +25,7 @@ app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 BANCO = os.environ.get("COSMOS_DATABASE", "jurisprudencia")
 CONTAINER = os.environ.get("COSMOS_CONTAINER", "julgados")
 TAMANHO_MAXIMO = 50
-CAMPOS_LISTA = ("c.id, c.edicao, c.processo, c.ramos, c.tema, c.destaque, c.link, c.resumo_ia")
+CAMPOS_LISTA = ("c.id, c.edicao, c.processo, c.secao, c.ramos, c.tema, c.destaque, c.link, c.resumo_ia")
 
 _container = None
 _cache_ramos = {"quando": 0.0, "dados": None}
