@@ -228,6 +228,49 @@
     .soon strong { display: block; color: var(--ink); margin-bottom: 4px; }
     .composer.off { opacity: .55; pointer-events: none; }
 
+    /* ---------- Filtros (ramo e seção) ---------- */
+    .filtros { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 14px; }
+    .dd { position: relative; }
+    .dd-btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+      padding: 8px 10px 8px 14px; transition: border-color .15s, box-shadow .15s;
+    }
+    .dd-btn:hover { border-color: #b9c6c8; }
+    .dd-btn[aria-expanded="true"] { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+    .dd-btn .chev { width: 16px; height: 16px; color: var(--muted); transition: transform .15s; }
+    .dd-btn[aria-expanded="true"] .chev { transform: rotate(180deg); }
+    .dd-n {
+      min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px;
+      background: var(--accent); color: #fff; font-size: 12px; font-weight: 600;
+      display: inline-grid; place-items: center;
+    }
+    .dd-panel {
+      position: absolute; z-index: 30; top: calc(100% + 6px); left: 0;
+      width: 340px; max-width: calc(100vw - 32px);
+      background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+      box-shadow: 0 12px 32px rgba(15,28,32,.16); padding: 10px;
+    }
+    .dd-panel[hidden] { display: none; }
+    .dd-busca {
+      width: 100%; border: 1px solid var(--line); border-radius: 9px;
+      padding: 8px 10px; outline: 0; background: var(--paper);
+    }
+    .dd-busca:focus { border-color: var(--accent); background: var(--surface); }
+    .dd-list { list-style: none; margin: 8px 0; padding: 0; max-height: 280px; overflow: auto; }
+    .opt { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 8px; cursor: pointer; }
+    .opt:hover { background: var(--paper); }
+    .opt input { accent-color: var(--accent); width: 16px; height: 16px; flex-shrink: 0; margin: 0; }
+    .opt-nome { flex: 1; min-width: 0; }
+    .opt-n { color: var(--muted); font-size: 13px; }
+    .dd-vazio { padding: 12px 8px; color: var(--muted); font-size: 14px; }
+    .dd-foot { display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--line); padding-top: 8px; }
+    .link { background: none; border: 0; color: var(--accent-ink); font-weight: 500; padding: 6px; }
+    .btn.small { padding: 6px 14px; }
+    .sel-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }
+    .sel-chips:empty { display: none; }
+    .chip .x { margin-left: 6px; color: var(--muted); }
+
     /* ---------- Responsivo ---------- */
     @media (max-width: 900px) {
       .app { display: block; height: auto; }
@@ -247,6 +290,9 @@
       .split:not(.open) .reader { display: none; }
       .split.open .list { display: none; }
       .page-head h1 { font-size: 24px; }
+      .dd { position: static; }
+      .dd-panel { left: 0; right: 0; width: auto; max-width: none; }
+      .dd-list { max-height: 45vh; }
       .specs > div { grid-template-columns: 1fr; gap: 2px; }
       .flow { grid-template-columns: 1fr; }
     }
@@ -283,7 +329,7 @@
     <section id="tela1" class="screen active">
       <header class="page-head">
         <h1>Buscar julgados</h1>
-        <p>Procure por palavras do tema e filtre pelo ramo do direito.</p>
+        <p>Procure por palavras do tema e filtre pelo ramo do direito e pela seção do informativo.</p>
       </header>
 
       <form class="searchbar" id="form1">
@@ -292,7 +338,11 @@
         <button class="btn" type="submit">Filtrar</button>
       </form>
 
-      <div class="chips" id="chips1" role="group" aria-label="Ramo do direito"></div>
+      <div class="filtros">
+        <div class="dd" id="dd-ramo"></div>
+        <div class="dd" id="dd-secao"></div>
+      </div>
+      <div class="sel-chips" id="sel1" aria-label="Filtros aplicados"></div>
 
       <div class="results-bar" id="bar1" aria-live="polite">Carregando…</div>
 
@@ -363,8 +413,7 @@
 <script>
   const API = '/api';
   const TAMANHO = 20;
-  const CHIPS_VISIVEIS = 10;
-
+  
   const isMobile = () => window.matchMedia('(max-width: 900px)').matches;
   const $ = id => document.getElementById(id);
   const html = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -421,17 +470,89 @@
   }
 
   /* ---------- Tela 1 ---------- */
-  const S = { ramos: new Set(), palavras: [], termo: '', pagina: 1, total: 0, itens: [], sel: -1, token: 0, completos: new Map(), todosRamos: [], verTodos: false };
+  const S = { ramos: new Set(), secoes: new Set(), palavras: [], termo: '', pagina: 1, total: 0, itens: [], sel: -1, token: 0, completos: new Map() };
   const list = $('list1'), reader = $('reader1'), split = $('split1'), bar = $('bar1');
 
-  function desenharChips() {
-    const visiveis = S.verTodos ? S.todosRamos : S.todosRamos.slice(0, CHIPS_VISIVEIS);
-    const marcados = S.todosRamos.filter(r => S.ramos.has(r.ramo) && !visiveis.includes(r));
-    $('chips1').innerHTML = [...visiveis, ...marcados].map(r =>
-      `<button type="button" class="chip" data-ramo="${html(r.ramo)}" aria-pressed="${S.ramos.has(r.ramo)}">${html(titulo(r.ramo))}</button>`).join('')
-      + (S.todosRamos.length > CHIPS_VISIVEIS
-        ? `<button type="button" class="chips-toggle" id="chips-toggle">${S.verTodos ? 'Mostrar menos' : 'Ver todos (' + S.todosRamos.length + ')'}</button>` : '');
+  /* ---------- Filtros em lista suspensa: busca dentro da lista, ordem alfabética, vários itens ---------- */
+  const FILTROS = {
+    ramo:  { rotulo: 'Ramo do direito', busca: 'Buscar ramo…', sel: S.ramos, itens: [] },
+    secao: { rotulo: 'Seção do informativo', busca: 'Buscar seção…', sel: S.secoes, itens: [] }
+  };
+  const ordenar = itens => itens.sort((x, y) => titulo(x.valor).localeCompare(titulo(y.valor), 'pt-BR'));
+  let atraso;
+  const agendarBusca = () => { clearTimeout(atraso); atraso = setTimeout(() => buscar(true), 300); };
+
+  function montarFiltro(chave) {
+    const f = FILTROS[chave], box = $('dd-' + chave);
+    box.innerHTML = `
+      <button type="button" class="dd-btn" aria-expanded="false" aria-controls="painel-${chave}">
+        <span>${f.rotulo}</span><b class="dd-n" hidden></b>
+        <svg class="i chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="dd-panel" id="painel-${chave}" hidden>
+        <input type="search" class="dd-busca" placeholder="${f.busca}" aria-label="${f.busca}" autocomplete="off">
+        <ul class="dd-list"></ul>
+        <div class="dd-foot"><button type="button" class="link" data-acao="limpar">Limpar</button><button type="button" class="btn small" data-acao="fechar">Concluir</button></div>
+      </div>`;
+    const botao = box.querySelector('.dd-btn'), painel = box.querySelector('.dd-panel'), busca = box.querySelector('.dd-busca');
+    botao.addEventListener('click', () => {
+      const abrir = painel.hidden;
+      fecharFiltros();
+      if (abrir) { painel.hidden = false; botao.setAttribute('aria-expanded', 'true'); if (!isMobile()) busca.focus(); }
+    });
+    busca.addEventListener('input', () => listarOpcoes(chave));
+    box.querySelector('.dd-list').addEventListener('change', e => {
+      const c = e.target;
+      c.checked ? f.sel.add(c.value) : f.sel.delete(c.value);
+      resumoFiltros(); agendarBusca();
+    });
+    painel.addEventListener('click', e => {
+      const acao = e.target.closest('[data-acao]')?.dataset.acao;
+      if (acao === 'limpar') { f.sel.clear(); listarOpcoes(chave); resumoFiltros(); agendarBusca(); }
+      if (acao === 'fechar') { fecharFiltros(); botao.focus(); }
+    });
+    listarOpcoes(chave);
   }
+
+  function listarOpcoes(chave) {
+    const f = FILTROS[chave], box = $('dd-' + chave);
+    const termo = dobrar(box.querySelector('.dd-busca').value.trim());
+    const itens = f.itens.filter(i => !termo || dobrar(titulo(i.valor)).includes(termo));
+    box.querySelector('.dd-list').innerHTML = itens.length
+      ? itens.map(i => `<li><label class="opt"><input type="checkbox" value="${html(i.valor)}"${f.sel.has(i.valor) ? ' checked' : ''}>
+          <span class="opt-nome">${html(titulo(i.valor))}</span><span class="opt-n">${i.total.toLocaleString('pt-BR')}</span></label></li>`).join('')
+      : `<li class="dd-vazio">${f.itens.length ? 'Nenhum resultado' : 'Carregando…'}</li>`;
+  }
+
+  function fecharFiltros() {
+    document.querySelectorAll('.dd-panel').forEach(p => p.hidden = true);
+    document.querySelectorAll('.dd-btn').forEach(b => b.setAttribute('aria-expanded', 'false'));
+  }
+
+  /* contador em cada botão + etiquetas dos filtros marcados (clique para remover) */
+  function resumoFiltros() {
+    const etiquetas = [];
+    Object.entries(FILTROS).forEach(([chave, f]) => {
+      const n = $('dd-' + chave).querySelector('.dd-n');
+      n.textContent = f.sel.size; n.hidden = !f.sel.size;
+      [...f.sel].sort((x, y) => titulo(x).localeCompare(titulo(y), 'pt-BR')).forEach(v =>
+        etiquetas.push(`<button type="button" class="chip" aria-pressed="true" data-chave="${chave}" data-valor="${html(v)}" title="Remover filtro">${html(titulo(v))}<span class="x" aria-hidden="true">×</span></button>`));
+    });
+    $('sel1').innerHTML = etiquetas.join('') + (etiquetas.length > 1 ? '<button type="button" class="link" data-acao="limpar-tudo">Limpar filtros</button>' : '');
+  }
+
+  $('sel1').addEventListener('click', e => {
+    if (e.target.closest('[data-acao="limpar-tudo"]')) { S.ramos.clear(); S.secoes.clear(); }
+    else {
+      const c = e.target.closest('.chip');
+      if (!c) return;
+      FILTROS[c.dataset.chave].sel.delete(c.dataset.valor);
+    }
+    Object.keys(FILTROS).forEach(listarOpcoes);
+    resumoFiltros(); buscar(true);
+  });
+  document.addEventListener('click', e => { if (!e.target.closest('.dd')) fecharFiltros(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') fecharFiltros(); });
 
   function desenharLista() {
     if (!S.itens.length) { list.innerHTML = ''; return; }
@@ -462,13 +583,13 @@
       mensagem('Buscando…');
     }
     try {
-      const dados = await chamar('/julgados', { ramos: [...S.ramos].join('|'), q: S.termo, pagina: S.pagina, tamanho: TAMANHO });
+      const dados = await chamar('/julgados', { ramos: [...S.ramos].join('|'), secoes: [...S.secoes].join('|'), q: S.termo, pagina: S.pagina, tamanho: TAMANHO });
       if (meu !== S.token) return;
       S.total = dados.total;
       S.itens = S.itens.concat(dados.itens);
       bar.innerHTML = `${S.total.toLocaleString('pt-BR')} julgado${S.total === 1 ? '' : 's'} encontrado${S.total === 1 ? '' : 's'}`
         + (S.itens.length < S.total ? ` <span>(mostrando ${S.itens.length})</span>` : '');
-      if (!S.itens.length) return mensagem('Nenhum julgado encontrado. Tente menos palavras ou outro ramo.');
+      if (!S.itens.length) return mensagem('Nenhum julgado encontrado. Tente menos palavras ou outros filtros.');
       desenharLista();
       if (reiniciar && !isMobile()) selecionar(0, false);
     } catch (e) {
@@ -487,7 +608,7 @@
       <div class="badges">${it.ramos.map(r => `<span class="badge">${html(titulo(r))}</span>`).join('')}</div>
       <h2>${html(d.principal)}</h2>
       <dl class="facts">
-        ${fato('Órgão julgador', html(d.orgao))}${fato('Relator', html(d.relator))}${fato('Julgamento', html(d.julgamento))}${fato('Publicado em', link)}
+        ${fato('Seção do informativo', html(titulo(it.secao || '')))}${fato('Órgão julgador', html(d.orgao))}${fato('Relator', html(d.relator))}${fato('Julgamento', html(d.julgamento))}${fato('Publicado em', link)}
       </dl>
       ${it.destaque ? `<h3>Tese</h3><p class="tese">${destacar(it.destaque, S.palavras)}</p>` : ''}
       <h3>Tema</h3>
@@ -530,22 +651,17 @@
     if (e.target.closest('.back')) { split.classList.remove('open'); window.scrollTo(0, 0); }
   });
   $('form1').addEventListener('submit', e => { e.preventDefault(); buscar(true); });
-  $('chips1').addEventListener('click', e => {
-    if (e.target.closest('#chips-toggle')) { S.verTodos = !S.verTodos; desenharChips(); return; }
-    const c = e.target.closest('.chip');
-    if (!c) return;
-    const r = c.dataset.ramo;
-    S.ramos.has(r) ? S.ramos.delete(r) : S.ramos.add(r);
-    c.setAttribute('aria-pressed', S.ramos.has(r));
-    buscar(true);
-  });
-
   async function iniciar() {
+    Object.keys(FILTROS).forEach(montarFiltro);
     buscar(true);
     try {
-      S.todosRamos = await chamar('/ramos');
-      desenharChips();
-    } catch (e) { $('chips1').innerHTML = ''; }
+      FILTROS.ramo.itens = ordenar((await chamar('/ramos')).map(r => ({ valor: r.ramo, total: r.total })));
+      listarOpcoes('ramo');
+    } catch (e) { FILTROS.ramo.itens = []; }
+    try {
+      FILTROS.secao.itens = ordenar((await chamar('/secoes')).map(r => ({ valor: r.secao, total: r.total })));
+      listarOpcoes('secao');
+    } catch (e) { FILTROS.secao.itens = []; }
   }
 
   /* ---------- Tela 3: sobre a base ---------- */

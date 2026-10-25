@@ -4,8 +4,10 @@ API do buscador de jurisprudência (Azure Static Web Apps, pasta api/).
 Rotas (todas GET):
   /api/meta                       dados da Tela 3 (última edição, total, atualização...)
   /api/ramos                      ramos do direito com a quantidade de julgados de cada um
+  /api/secoes                     seções do informativo (turmas, seções, repetitivos...) com a quantidade de cada uma
   /api/julgados                   busca com filtros (lista, sem o inteiro teor)
         ramos=DIREITO CIVIL|DIREITO PENAL   (opcional, vários = OU; separados por "|")
+        secoes=QUARTA TURMA|CORTE ESPECIAL  (opcional, vários = OU; separados por "|")
         q=plano de saude                    (opcional, todas as palavras precisam aparecer)
         pagina=1  tamanho=20                (tamanho máximo 50)
   /api/julgados/{edicao}/{id}     um julgado completo, com o inteiro teor
@@ -28,8 +30,8 @@ TAMANHO_MAXIMO = 50
 CAMPOS_LISTA = ("c.id, c.edicao, c.processo, c.secao, c.ramos, c.tema, c.destaque, c.link, c.resumo_ia")
 
 _container = None
-_cache_ramos = {"quando": 0.0, "dados": None}
-CACHE_RAMOS_SEGUNDOS = 3600   # a lista de ramos só muda quando entra edição nova
+_cache = {}                   # nome -> {"quando": ..., "dados": ...}
+CACHE_SEGUNDOS = 3600         # as listas de ramos e seções só mudam quando entra edição nova
 
 
 def container():
@@ -51,7 +53,7 @@ def resposta(corpo, status=200):
                              mimetype="application/json", headers={"Cache-Control": "no-store"})
 
 
-def montar_filtro(ramos, termo):
+def montar_filtro(ramos, secoes, termo):
     """-> (trecho WHERE, parâmetros). Tudo parametrizado: nada do usuário entra no texto da query."""
     condicoes, params = ['c.edicao != "_meta"'], []
     if ramos:
@@ -59,6 +61,12 @@ def montar_filtro(ramos, termo):
         for i, r in enumerate(ramos):
             ors.append(f"ARRAY_CONTAINS(c.ramos, @r{i})")
             params.append({"name": f"@r{i}", "value": r})
+        condicoes.append("(" + " OR ".join(ors) + ")")
+    if secoes:
+        ors = []
+        for i, sc in enumerate(secoes):
+            ors.append(f"c.secao = @s{i}")
+            params.append({"name": f"@s{i}", "value": sc})
         condicoes.append("(" + " OR ".join(ors) + ")")
     for i, palavra in enumerate(p for p in normalizar(termo).split() if p):
         condicoes.append(f"(CONTAINS(c.tema_busca, @t{i}) OR CONTAINS(c.destaque_busca, @t{i}))")
@@ -85,21 +93,35 @@ def meta(req: func.HttpRequest) -> func.HttpResponse:
         return resposta({"erro": "falha ao consultar a base"}, 500)
 
 
+def contagem_em_cache(nome, consulta, extrair):
+    """Conta valores de um campo percorrendo a base uma vez por hora (GROUP BY entre partições não é aceito pelo SDK)."""
+    agora = time.time()
+    item = _cache.get(nome)
+    if item is None or agora - item["quando"] > CACHE_SEGUNDOS:
+        valores = container().query_items(consulta, enable_cross_partition_query=True)
+        contagem = Counter(v for lista in valores for v in extrair(lista) if v)
+        item = {"quando": agora, "dados": [{"nome": k, "total": n} for k, n in sorted(contagem.items())]}
+        _cache[nome] = item
+    return item["dados"]
+
+
 @app.route(route="ramos", methods=["GET"])
 def ramos(req: func.HttpRequest) -> func.HttpResponse:
     try:
-        agora = time.time()
-        if _cache_ramos["dados"] is None or agora - _cache_ramos["quando"] > CACHE_RAMOS_SEGUNDOS:
-            # GROUP BY entre partições não é aceito pelo SDK: traz só a lista de ramos de cada julgado e conta aqui
-            listas = container().query_items('SELECT VALUE c.ramos FROM c WHERE c.edicao != "_meta"',
-                                             enable_cross_partition_query=True)
-            contagem = Counter(r for lista in listas for r in lista)
-            _cache_ramos["dados"] = [{"ramo": r, "total": n}
-                                     for r, n in sorted(contagem.items(), key=lambda x: (-x[1], x[0]))]
-            _cache_ramos["quando"] = agora
-        return resposta(_cache_ramos["dados"])
+        dados = contagem_em_cache("ramos", 'SELECT VALUE c.ramos FROM c WHERE c.edicao != "_meta"', lambda lista: lista)
+        return resposta([{"ramo": d["nome"], "total": d["total"]} for d in dados])
     except Exception:
         logging.exception("ramos")
+        return resposta({"erro": "falha ao consultar a base"}, 500)
+
+
+@app.route(route="secoes", methods=["GET"])
+def secoes(req: func.HttpRequest) -> func.HttpResponse:
+    try:
+        dados = contagem_em_cache("secoes", 'SELECT VALUE c.secao FROM c WHERE c.edicao != "_meta"', lambda v: [v])
+        return resposta([{"secao": d["nome"], "total": d["total"]} for d in dados])
+    except Exception:
+        logging.exception("secoes")
         return resposta({"erro": "falha ao consultar a base"}, 500)
 
 
@@ -107,11 +129,12 @@ def ramos(req: func.HttpRequest) -> func.HttpResponse:
 def julgados(req: func.HttpRequest) -> func.HttpResponse:
     try:
         ramos_sel = [r.strip() for r in req.params.get("ramos", "").split("|") if r.strip()]
+        secoes_sel = [x.strip() for x in req.params.get("secoes", "").split("|") if x.strip()]
         termo = req.params.get("q", "").strip()[:200]
         tamanho = inteiro(req.params.get("tamanho"), 20, 1, TAMANHO_MAXIMO)
         pagina = inteiro(req.params.get("pagina"), 1, 1, 10_000)
 
-        where, params = montar_filtro(ramos_sel, termo)
+        where, params = montar_filtro(ramos_sel, secoes_sel, termo)
         c = container()
         total = next(iter(c.query_items(f"SELECT VALUE COUNT(1) FROM c WHERE {where}",
                                         parameters=params, enable_cross_partition_query=True)), 0)
