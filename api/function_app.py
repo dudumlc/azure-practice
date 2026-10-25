@@ -11,6 +11,8 @@ Rotas (todas GET):
         q=plano de saude                    (opcional, todas as palavras precisam aparecer)
         pagina=1  tamanho=20                (tamanho máximo 50)
   /api/julgados/{edicao}/{id}     um julgado completo, com o inteiro teor
+  POST /api/atualizar             pede uma verificação de edições novas (202 | 409 em andamento | 429 em espera)
+  GET  /api/atualizar/status      andamento e resultado da última verificação
 """
 import json
 import logging
@@ -21,6 +23,8 @@ from collections import Counter
 
 import azure.functions as func
 from azure.cosmos import CosmosClient, exceptions
+
+import verificacao
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 
@@ -159,4 +163,31 @@ def julgado(req: func.HttpRequest) -> func.HttpResponse:
         return resposta({"erro": "julgado não encontrado"}, 404)
     except Exception:
         logging.exception("julgado")
+        return resposta({"erro": "falha ao consultar a base"}, 500)
+
+
+def enfileirar():
+    """Põe a mensagem que dispara a Function de ingestão (fila na Storage Account)."""
+    from azure.storage.queue import QueueClient
+    fila = QueueClient.from_connection_string(os.environ["STORAGE_CONNECTION_STRING"],
+                                              os.environ.get("FILA_ATUALIZACAO", "fila-atualizacao"))
+    fila.send_message("verificar")
+
+
+@app.route(route="atualizar", methods=["POST"])
+def atualizar(req: func.HttpRequest) -> func.HttpResponse:
+    try:
+        status, corpo = verificacao.solicitar_verificacao(container(), enfileirar)
+        return resposta(corpo, status)
+    except Exception:
+        logging.exception("atualizar")
+        return resposta({"erro": "não foi possível iniciar a verificação"}, 500)
+
+
+@app.route(route="atualizar/status", methods=["GET"])
+def atualizar_status(req: func.HttpRequest) -> func.HttpResponse:
+    try:
+        return resposta(verificacao.estado_da_verificacao(container()))
+    except Exception:
+        logging.exception("atualizar_status")
         return resposta({"erro": "falha ao consultar a base"}, 500)

@@ -14,7 +14,6 @@ import io
 import os
 import re
 
-import pandas as pd
 import pdfplumber
 
 # ---------------------------------------------------------------- ruído de página
@@ -208,16 +207,23 @@ def extrair_blocos(paginas):
     return blocos
 
 
-def ler_pdf(origem):
-    """origem: caminho do arquivo (carga local) ou os bytes do PDF (produção, baixado em memória)."""
+def ler_pdf_detalhado(origem):
+    """-> (blocos, quantas linhas "PROCESSO ..." o PDF tem). A contagem serve de conferência independente do extrator."""
     if isinstance(origem, (bytes, bytearray)):
         origem = io.BytesIO(origem)
     with pdfplumber.open(origem) as pdf:
         paginas = [p.extract_text() for p in pdf.pages]
-    return extrair_blocos(paginas)
+    n_processo = sum(1 for p in paginas for l in (p or "").splitlines() if l.strip().startswith("PROCESSO "))
+    return extrair_blocos(paginas), n_processo
+
+
+def ler_pdf(origem):
+    """origem: caminho do arquivo (carga local) ou os bytes do PDF (produção, baixado em memória)."""
+    return ler_pdf_detalhado(origem)[0]
 
 
 def extracao_infos(pasta, arquivo_resultado):
+    import pandas as pd   # só a carga em Excel usa; a Function de produção não precisa
     if os.path.exists(arquivo_resultado):
         df_lido = pd.read_excel(arquivo_resultado)
     else:

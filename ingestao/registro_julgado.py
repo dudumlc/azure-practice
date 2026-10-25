@@ -53,6 +53,21 @@ def eh_aviso(bloco):
     return not ramos_do_bloco(bloco) and not (bloco["TEMA"].strip() and bloco["DESTAQUE"].strip())
 
 
+def sem_repetidos(blocos):
+    """O STJ às vezes publica o mesmo julgado mais de uma vez na mesma edição (ex.: 0720). Mantém um só.
+
+    Mesma chave da carga em Excel (ingestao_spot_excel.py), para os dois caminhos gerarem os mesmos ids.
+    """
+    vistos, unicos = set(), []
+    for b in blocos:
+        chave = tuple(str(b.get(c, "")).strip() for c in
+                      ("PROCESSO", "SECAO", "TEMA", "DESTAQUE", "INTEIRO_TEOR", "OBS"))
+        if chave not in vistos:
+            vistos.add(chave)
+            unicos.append(b)
+    return unicos
+
+
 def montar_docs(edicao, blocos):
     """Blocos de UMA edição -> lista de documentos. Ids estáveis (não dependem do TEMA)."""
     ocorrencias = {}

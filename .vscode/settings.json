@@ -1,9 +1,11 @@
 {
-    "azureFunctions.deploySubpath": ".",
+    "azureFunctions.deploySubpath": "ingestao",
+    "azureFunctions.projectSubpath": "ingestao",
     "azureFunctions.scmDoBuildDuringDeployment": true,
-    "azureFunctions.pythonVenv": ".venv",
+    "azureFunctions.pythonVenv": "../.venv",
     "azureFunctions.projectLanguage": "Python",
     "azureFunctions.projectRuntime": "~4",
     "debug.internalConsoleOptions": "neverOpen",
-    "azureFunctions.projectLanguageModel": 2
+    "azureFunctions.projectLanguageModel": 2,
+    "python.analysis.extraPaths": ["ingestao"]
 }

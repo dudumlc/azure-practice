@@ -4,3 +4,6 @@
 
 azure-functions
 azure-cosmos
+pdfplumber
+requests
+ 

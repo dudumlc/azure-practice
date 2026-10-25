@@ -56,6 +56,32 @@ def baixar_pdf(sessao, url):
     return "bloqueio", motivo
 
 
+class BloqueioSTJ(Exception):
+    """O site recusou ou não respondeu depois das tentativas (403, 429, 5xx, rede)."""
+
+
+def novas_edicoes(sessao, ultima, url=URL):
+    """Produção (Function): tenta ultima+1, ultima+2... SEM tocar em disco.
+
+    Gera (edicao, bytes_do_pdf) para cada edição encontrada e para depois de MAX_AUSENTES
+    inexistentes seguidas, ou seja, quando acabaram as edições novas. Levanta BloqueioSTJ se o
+    site bloquear; o que já foi gerado até ali continua valendo.
+    """
+    n, ausentes = ultima, 0
+    while ausentes < MAX_AUSENTES:
+        n += 1
+        ed = f"{n:04d}"
+        status, dado = baixar_pdf(sessao, url.format(edicao=ed))
+        if status == "ok":
+            ausentes = 0
+            yield ed, dado
+        elif status == "sem_pdf":
+            ausentes += 1
+        else:
+            raise BloqueioSTJ(f"{ed}: {dado}")
+        time.sleep(PAUSA)
+
+
 def obter(sessao, args, ed):
     """Garante o PDF da edição na pasta. Devolve ("existe"|"ok"|"sem_pdf"|"bloqueio", detalhe)."""
     destino = os.path.join(args.pasta, f"Inf{ed}.pdf")

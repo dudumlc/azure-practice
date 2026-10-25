@@ -208,6 +208,7 @@
     .update p { margin: 2px 0 0; color: var(--muted); }
     .update strong { font-size: 16px; }
     .status { display: block; margin-top: 12px; color: var(--muted); font-size: 14px; }
+    .btn:disabled { opacity: .55; cursor: not-allowed; }
 
 
     /* ---------- Acréscimos da versão conectada ---------- */
@@ -385,7 +386,7 @@
           <div><dt>Edições na base</dt><dd id="m-edicoes">...</dd></div>
           <div><dt>Fonte dos dados</dt><dd id="m-fonte">...</dd></div>
           <div><dt>IA</dt><dd id="m-ia">...</dd></div>
-          <div><dt>Versão do app</dt><dd>0.2, busca por filtros</dd></div>
+          <div><dt>Versão do app</dt><dd>0.3, busca por filtros e verificação de edições novas</dd></div>
         </dl>
 
         <h2>Como funciona</h2>
@@ -692,12 +693,80 @@
     window.scrollTo(0, 0);
   }));
 
-  $('btn-update').addEventListener('click', () => {
-    $('status').textContent = 'Ainda não conectado. Quando estiver pronto, o andamento da verificação aparece aqui.';
+  /* ---------- Botão "Verificar agora": pede à API, acompanha o andamento e mostra o resultado ---------- */
+  const btnUpdate = $('btn-update'), statusEl = $('status');
+  let acompanhando = false;
+
+  async function enviar(caminho, metodo) {
+    const r = await fetch(API + caminho, { method: metodo });
+    let corpo = null;
+    try { corpo = await r.json(); } catch (e) { /* resposta sem JSON */ }
+    return { status: r.status, corpo };
+  }
+
+  function textoStatus(s) {
+    const fim = s.finalizado_em ? ' (' + dataHora(s.finalizado_em) + ')' : '';
+    const revisar = s.resultado && s.resultado.a_revisar ? Object.keys(s.resultado.a_revisar) : [];
+    const aviso = revisar.length ? ' Atenção: ' + revisar.join(', ') + ' marcada(s) para revisão.' : '';
+    switch (s.estado) {
+      case 'nunca': return 'Nenhuma verificação feita ainda.';
+      case 'na_fila': return 'Na fila, começando em instantes…';
+      case 'rodando': return s.etapa || 'Verificando…';
+      case 'ok': return (s.mensagem || 'Base atualizada.') + fim + aviso;
+      case 'sem_novidade': return (s.mensagem || 'Nenhuma edição nova.') + fim;
+      case 'bloqueio': return (s.mensagem || 'O site do STJ recusou o pedido.') + fim;
+      default: return (s.mensagem || 'A verificação não terminou.') + fim;
+    }
+  }
+
+  function mostrarStatus(s) {
+    let texto = textoStatus(s);
+    const emAndamento = s.motivo === 'em_andamento';
+    if (s.motivo === 'espera' && s.proxima_verificacao_em) texto += ' Nova verificação a partir de ' + dataHora(s.proxima_verificacao_em) + '.';
+    statusEl.textContent = texto;
+    btnUpdate.disabled = !s.pode_verificar;
+    btnUpdate.textContent = emAndamento ? 'Verificando…' : 'Verificar agora';
+    btnUpdate.title = s.pode_verificar ? '' : (emAndamento ? 'Há uma verificação em andamento' : 'Aguarde o fim do período de espera');
+    return emAndamento;
+  }
+
+  async function acompanhar() {
+    if (acompanhando) return;
+    acompanhando = true;
+    try {
+      for (let i = 0; i < 240; i++) {                    // até uns 12 minutos, de 3 em 3 segundos
+        const s = await chamar('/atualizar/status');
+        if (!mostrarStatus(s)) {
+          if (s.estado === 'ok') carregarMeta();            // a base mudou: atualiza os números da página
+          return;
+        }
+        await new Promise(r => setTimeout(r, 3000));
+      }
+    } catch (e) {
+      statusEl.textContent = 'Não foi possível consultar o andamento. Atualize a página em instantes.';
+    } finally { acompanhando = false; }
+  }
+
+  btnUpdate.addEventListener('click', async () => {
+    btnUpdate.disabled = true;
+    statusEl.textContent = 'Enviando o pedido…';
+    try {
+      const { status, corpo } = await enviar('/atualizar', 'POST');
+      if (corpo && corpo.estado) { mostrarStatus(corpo); acompanhar(); }
+      else throw new Error('HTTP ' + status);
+    } catch (e) {
+      statusEl.textContent = 'Não foi possível iniciar a verificação agora. Tente de novo em instantes.';
+      btnUpdate.disabled = false;
+    }
   });
+
+  async function carregarStatusInicial() {
+    try { if (mostrarStatus(await chamar('/atualizar/status'))) acompanhar(); } catch (e) { /* mantém o texto padrão */ }
+  }
 
   iniciar();
   carregarMeta();
+  carregarStatusInicial();
 </script>
 
 </body>
