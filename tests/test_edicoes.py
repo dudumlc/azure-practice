@@ -13,7 +13,7 @@ import sys
 
 import pdfplumber
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "ingestao"))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "api"))
 from extrator_informativos import ler_pdf  # noqa: E402
 
 

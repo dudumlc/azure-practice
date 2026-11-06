@@ -29,12 +29,18 @@ MAX_BLOQUEIOS = 3      # edições seguidas bloqueadas -> para tudo
 MAX_AUSENTES = 3       # no modo automático: edições inexistentes seguidas = chegou ao fim
 
 
-def baixar_pdf(sessao, url):
-    """Devolve ("ok", bytes) | ("sem_pdf", motivo) | ("bloqueio", motivo)."""
+def baixar_pdf(sessao, url, prazo=None):
+    """Devolve ("ok", bytes) | ("sem_pdf", motivo) | ("bloqueio", motivo) | ("tempo", motivo).
+
+    `prazo` (opcional) é um horário do time.monotonic(): se ele não deixa tempo para esperar ou tentar de novo,
+    devolve "tempo" em vez de ficar esperando (a API do Static Web App corta a chamada em ~45 s)."""
     motivo = ""
     for tentativa in range(TENTATIVAS):
+        if prazo is not None and prazo - time.monotonic() < 3:
+            return "tempo", "o tempo reservado para esta chamada acabou"
         try:
-            r = sessao.get(url, timeout=60)
+            limite = 60 if prazo is None else max(3, min(60, prazo - time.monotonic()))
+            r = sessao.get(url, timeout=limite)
         except requests.RequestException as e:
             motivo = f"erro de rede: {e.__class__.__name__}"
         else:
@@ -48,11 +54,19 @@ def baixar_pdf(sessao, url):
                 motivo = f"HTTP {r.status_code}"
                 espera = r.headers.get("Retry-After", "")
                 if espera.isdigit():
-                    time.sleep(min(int(espera), 120))
+                    pausa = min(int(espera), 120)
+                    if prazo is not None and time.monotonic() + pausa > prazo:
+                        return "tempo", "o tempo reservado para esta chamada acabou"
+                    time.sleep(pausa)
                     continue
             else:
                 return "sem_pdf", f"HTTP {r.status_code}"
-        time.sleep(5 * 2 ** tentativa)
+        if tentativa == TENTATIVAS - 1:
+            break                                    # última tentativa: não adianta esperar
+        pausa = 5 * 2 ** tentativa
+        if prazo is not None and time.monotonic() + pausa > prazo:
+            return "tempo", "o tempo reservado para esta chamada acabou"
+        time.sleep(pausa)
     return "bloqueio", motivo
 
 
@@ -60,25 +74,34 @@ class BloqueioSTJ(Exception):
     """O site recusou ou não respondeu depois das tentativas (403, 429, 5xx, rede)."""
 
 
-def novas_edicoes(sessao, ultima, url=URL):
+class TempoEsgotado(Exception):
+    """O tempo reservado para esta chamada acabou antes de terminar o download (não é bloqueio do site)."""
+
+
+def novas_edicoes(sessao, ultima, url=URL, prazo=None):
     """Produção (Function): tenta ultima+1, ultima+2... SEM tocar em disco.
 
     Gera (edicao, bytes_do_pdf) para cada edição encontrada e para depois de MAX_AUSENTES
     inexistentes seguidas, ou seja, quando acabaram as edições novas. Levanta BloqueioSTJ se o
-    site bloquear; o que já foi gerado até ali continua valendo.
+    site bloquear e TempoEsgotado se passar do `prazo` (horário do time.monotonic(), opcional); o que já foi
+    gerado até ali continua valendo.
     """
     n, ausentes = ultima, 0
     while ausentes < MAX_AUSENTES:
         n += 1
         ed = f"{n:04d}"
-        status, dado = baixar_pdf(sessao, url.format(edicao=ed))
+        status, dado = baixar_pdf(sessao, url.format(edicao=ed), prazo)
         if status == "ok":
             ausentes = 0
             yield ed, dado
         elif status == "sem_pdf":
             ausentes += 1
+        elif status == "tempo":
+            raise TempoEsgotado(f"{ed}: {dado}")
         else:
             raise BloqueioSTJ(f"{ed}: {dado}")
+        if prazo is not None and time.monotonic() + PAUSA > prazo:
+            raise TempoEsgotado(f"depois da {ed}: o tempo reservado para esta chamada acabou")
         time.sleep(PAUSA)
 
 

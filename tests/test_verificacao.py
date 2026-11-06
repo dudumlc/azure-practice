@@ -42,83 +42,97 @@ class ContainerFalso:
         self._gravar(doc)
 
 
-class Fila:
-    def __init__(self, falha=False):
-        self.mensagens, self.falha = [], falha
+class Executor:
+    """Faz o papel de job.executar_job: grava o job final no container e o devolve."""
+    def __init__(self, container, estado="ok", falha=False):
+        self.container, self.estado, self.falha, self.chamadas = container, estado, falha, []
 
     def __call__(self):
         if self.falha:
-            raise RuntimeError("fila fora do ar")
-        self.mensagens.append("verificar")
+            raise RuntimeError("Cosmos fora do ar")
+        self.chamadas.append(1)
+        espera = {"ok": timedelta(days=7), "parcial": timedelta(0)}.get(self.estado, timedelta(hours=1))
+        job = {"id": "job", "edicao": "_meta", "estado": self.estado, "mensagem": "feito", "etapa": "",
+               "finalizado_em": iso(T0), "proxima_verificacao_em": iso(T0 + espera)}
+        self.container.upsert_item(job)
+        return job
 
 
 def job_pronto(c, **campos):
     c._gravar({"id": "job", "edicao": "_meta", **campos})
 
 
-def test_primeira_vez_enfileira():
-    c, fila = ContainerFalso(), Fila()
-    status, corpo = solicitar_verificacao(c, fila, T0)
-    assert status == 202 and corpo["estado"] == "na_fila" and fila.mensagens == ["verificar"]
-    assert c.read_item("job", "_meta")["estado"] == "na_fila"
+def test_primeira_vez_executa_e_devolve_o_resultado():
+    c = ContainerFalso()
+    ex = Executor(c)
+    status, corpo = solicitar_verificacao(c, ex, T0)
+    assert status == 200 and corpo["estado"] == "ok" and corpo["mensagem"] == "feito" and len(ex.chamadas) == 1
+    assert corpo["motivo"] == "espera" and not corpo["pode_verificar"]      # 7 dias de espera depois de "ok"
 
 
-def test_dentro_da_espera_de_7_dias_recusa_e_nao_enfileira():
-    c, fila = ContainerFalso(), Fila()
+def test_dentro_da_espera_de_7_dias_recusa_e_nao_executa():
+    c = ContainerFalso()
+    ex = Executor(c)
     job_pronto(c, estado="ok", proxima_verificacao_em=iso(T0 + timedelta(days=5)))
-    status, corpo = solicitar_verificacao(c, fila, T0)
-    assert status == 429 and corpo["motivo"] == "espera" and not corpo["pode_verificar"] and not fila.mensagens
+    status, corpo = solicitar_verificacao(c, ex, T0)
+    assert status == 429 and corpo["motivo"] == "espera" and not corpo["pode_verificar"] and not ex.chamadas
     assert corpo["proxima_verificacao_em"] == iso(T0 + timedelta(days=5))
 
 
 def test_depois_da_espera_libera():
-    c, fila = ContainerFalso(), Fila()
+    c = ContainerFalso()
+    ex = Executor(c)
     job_pronto(c, estado="ok", proxima_verificacao_em=iso(T0 - timedelta(minutes=1)))
-    assert solicitar_verificacao(c, fila, T0)[0] == 202 and len(fila.mensagens) == 1
+    assert solicitar_verificacao(c, ex, T0)[0] == 200 and len(ex.chamadas) == 1
+
+
+def test_parcial_deixa_o_botao_liberado():
+    c = ContainerFalso()
+    status, corpo = solicitar_verificacao(c, Executor(c, "parcial"), T0)
+    assert status == 200 and corpo["estado"] == "parcial" and corpo["pode_verificar"]
 
 
 def test_ja_na_fila_ou_rodando_recusa():
     for estado in ("na_fila", "rodando"):
-        c, fila = ContainerFalso(), Fila()
-        job_pronto(c, estado=estado, criado_em=iso(T0 - timedelta(minutes=2)), iniciado_em=iso(T0 - timedelta(minutes=1)))
-        status, corpo = solicitar_verificacao(c, fila, T0)
-        assert status == 409 and corpo["motivo"] == "em_andamento" and not fila.mensagens
+        c = ContainerFalso()
+        ex = Executor(c)
+        job_pronto(c, estado=estado, criado_em=iso(T0 - timedelta(seconds=50)), iniciado_em=iso(T0 - timedelta(seconds=40)))
+        status, corpo = solicitar_verificacao(c, ex, T0)
+        assert status == 409 and corpo["motivo"] == "em_andamento" and not ex.chamadas
 
 
-def test_job_travado_ha_muito_tempo_libera():
-    c, fila = ContainerFalso(), Fila()
-    job_pronto(c, estado="rodando", iniciado_em=iso(T0 - timedelta(minutes=40)))
-    assert solicitar_verificacao(c, fila, T0)[0] == 202
+def test_job_travado_ha_mais_de_2_minutos_libera():
+    c = ContainerFalso()
+    job_pronto(c, estado="rodando", iniciado_em=iso(T0 - timedelta(minutes=3)))
+    assert solicitar_verificacao(c, Executor(c), T0)[0] == 200
 
 
-def test_dois_cliques_ao_mesmo_tempo_so_um_enfileira():
-    c, fila = ContainerFalso(), Fila()
+def test_dois_cliques_ao_mesmo_tempo_so_um_executa():
+    c = ContainerFalso()
+    ex = Executor(c, "parcial")
     job_pronto(c, estado="ok", proxima_verificacao_em=iso(T0 - timedelta(hours=1)))
-    lido = c.read_item("job", "_meta")
-    original = c.read_item
-    chamadas = []
+    lido = c.read_item("job", "_meta")                 # o que o 2º pedido enxergou antes do 1º gravar
+    assert solicitar_verificacao(c, ex, T0)[0] == 200
+    original, leituras = c.read_item, []
 
-    def leitura_atrasada(id, partition_key):          # o 2º pedido leu o job antes do 1º gravar
-        chamadas.append(1)
-        return lido if len(chamadas) == 2 else original(id, partition_key)
+    def leitura_atrasada(id, partition_key):
+        leituras.append(1)
+        return lido if len(leituras) == 1 else original(id, partition_key)
 
-    assert solicitar_verificacao(c, fila, T0)[0] == 202
     c.read_item = leitura_atrasada
-    chamadas.clear(); chamadas.append(1)
-    status, _ = solicitar_verificacao(c, fila, T0)
-    assert status == 409 and len(fila.mensagens) == 1
+    status, _ = solicitar_verificacao(c, ex, T0)
+    assert status == 409 and len(ex.chamadas) == 1
 
 
-def test_falha_ao_enfileirar_nao_prende_o_botao():
+def test_falha_ao_executar_nao_prende_o_botao():
     c = ContainerFalso()
     try:
-        solicitar_verificacao(c, Fila(falha=True), T0)
+        solicitar_verificacao(c, Executor(c, falha=True), T0)
         assert False
     except RuntimeError:
         pass
-    job = c.read_item("job", "_meta")
-    assert job["estado"] == "erro"
-    assert solicitar_verificacao(c, Fila(), T0 + timedelta(seconds=1))[0] == 202
+    assert c.read_item("job", "_meta")["estado"] == "erro"
+    assert solicitar_verificacao(c, Executor(c), T0 + timedelta(seconds=1))[0] == 200
 
 
 def test_status_sem_job_libera_o_botao():

@@ -17,7 +17,7 @@ from collections import Counter, defaultdict
 
 import pdfplumber
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "ingestao"))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "api"))
 from extrator_informativos import FIM_DE_BLOCO, _linhas_limpas  # noqa: E402
 
 RE_CAIXA_ALTA = re.compile(r"^[A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][A-ZÁÀÂÃÉÊÍÓÔÕÚÇ0-9 ,\-–/ªº.]{3,}$")

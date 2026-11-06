@@ -17,8 +17,8 @@ import time
 
 import pandas as pd
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "ingestao"))
-from registro_julgado import edicao_do_arquivo, eh_aviso, montar_docs, montar_meta  # noqa: E402
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "api"))
+from api.registro_julgado import edicao_do_arquivo, eh_aviso, montar_docs, montar_meta  # noqa: E402
 
 VERSAO_PARSER = "excel-2026-10-secao"
 CHAVE = ["ARQUIVO", "PROCESSO", "SECAO", "TEMA", "DESTAQUE", "INTEIRO_TEOR", "OBS"]

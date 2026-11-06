@@ -1,5 +1,5 @@
 """
-Testa ingestao/atualizar.py sem Azure e sem internet: Cosmos de mentira (em memória) e PDFs de uma pasta.
+Testa api/atualizar.py sem Azure e sem internet: Cosmos de mentira (em memória) e PDFs de uma pasta.
 
 Uso (raiz do projeto):
     python tests/test_atualizar.py data
@@ -8,9 +8,9 @@ Usa as edições 0800 e 0720 da pasta como se fossem "novas". Roda também com p
 import os
 import sys
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "ingestao"))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "api"))
 from atualizar import atualizar  # noqa: E402
-from baixar_informativos import BloqueioSTJ  # noqa: E402
+from baixar_informativos import BloqueioSTJ, TempoEsgotado  # noqa: E402
 
 PASTA = os.environ.get("PASTA_PDFS", "data")
 
@@ -58,13 +58,26 @@ def base_com_meta(ultima="0719"):
     return c
 
 
-def novas_de(*edicoes, bloqueio_depois=False):
-    def gerador(sessao, ultima):
+def novas_de(*edicoes, bloqueio_depois=False, tempo_depois=False, relogio=None, segundos_por_edicao=0):
+    """Gerador que imita novas_edicoes(). Com `relogio`, cada edição "gasta" segundos_por_edicao no relógio falso."""
+    def gerador(sessao, ultima, **kw):
         for e in edicoes:
+            if relogio is not None:
+                relogio.t += segundos_por_edicao
             yield e, pdf(e)
         if bloqueio_depois:
             raise BloqueioSTJ("0999: HTTP 403")
+        if tempo_depois:
+            raise TempoEsgotado("0999: o tempo reservado acabou")
     return gerador
+
+
+class RelogioFalso:
+    def __init__(self):
+        self.t = 0.0
+
+    def __call__(self):
+        return self.t
 
 
 def test_edicao_nova_e_gravada():
@@ -129,6 +142,50 @@ def test_divergencia_de_contagem_marca_a_revisar():
     assert "0720" in r["a_revisar"]
     meta = c.read_item("meta", "_meta")
     assert meta["edicoes_a_revisar"] == ["0720"] and "contagem" in meta["revisar_motivos"]["0720"][0]
+
+
+def test_sem_orcamento_processa_todas_as_edicoes():
+    c = base_com_meta()
+    r = atualizar(c, sessao=object(), novas=novas_de("0720", "0800"))
+    assert r["estado"] == "ok" and r["edicoes_novas"] == ["0720", "0800"]
+
+
+def test_orcamento_curto_para_depois_da_primeira_edicao_e_a_proxima_chamada_continua():
+    c, relogio = base_com_meta(), RelogioFalso()
+    novas = novas_de("0720", "0800", relogio=relogio, segundos_por_edicao=10)
+    # 1ª edição gasta 10 s; para a 2ª faltariam 10 x 1,3 = 13 s e só sobram 5 s: para.
+    r = atualizar(c, sessao=object(), novas=novas, orcamento_s=15, relogio=relogio)
+    assert r["estado"] == "parcial" and r["edicoes_novas"] == ["0720"], r
+    assert "de novo" in r["mensagem"]
+    assert c.read_item("meta", "_meta")["ultima_edicao"] == "0720"     # o que foi feito ficou gravado
+    r2 = atualizar(c, sessao=object(), novas=novas_de("0800"))         # o botão de novo: continua de onde parou
+    assert r2["estado"] == "ok" and r2["edicoes_novas"] == ["0800"]
+
+
+def test_orcamento_folgado_processa_tudo():
+    c, relogio = base_com_meta(), RelogioFalso()
+    novas = novas_de("0720", "0800", relogio=relogio, segundos_por_edicao=10)
+    r = atualizar(c, sessao=object(), novas=novas, orcamento_s=60, relogio=relogio)
+    assert r["estado"] == "ok" and r["edicoes_novas"] == ["0720", "0800"]
+
+
+def test_orcamento_repassa_prazo_para_o_download():
+    c, relogio, recebido = base_com_meta(), RelogioFalso(), {}
+
+    def novas(sessao, ultima, **kw):
+        recebido.update(kw)
+        return iter([])
+
+    atualizar(c, sessao=object(), novas=novas, orcamento_s=35, relogio=relogio)
+    assert recebido == {"prazo": 35.0}
+
+
+def test_tempo_esgotado_no_download_vira_parcial_e_nao_bloqueio():
+    c = base_com_meta()
+    r = atualizar(c, sessao=object(), novas=novas_de("0720", tempo_depois=True), orcamento_s=35)
+    assert r["estado"] == "parcial" and r["edicoes_novas"] == ["0720"]
+    r = atualizar(base_com_meta(), sessao=object(), novas=novas_de(tempo_depois=True), orcamento_s=35)
+    assert r["estado"] == "parcial" and r["edicoes_novas"] == [] and "demorou" in r["mensagem"]
 
 
 if __name__ == "__main__":

@@ -695,7 +695,7 @@
 
   /* ---------- Botão "Verificar agora": pede à API, acompanha o andamento e mostra o resultado ---------- */
   const btnUpdate = $('btn-update'), statusEl = $('status');
-  let acompanhando = false;
+  let acompanhando = false, enviando = false;
 
   async function enviar(caminho, metodo) {
     const r = await fetch(API + caminho, { method: metodo });
@@ -710,10 +710,11 @@
     const aviso = revisar.length ? ' Atenção: ' + revisar.join(', ') + ' marcada(s) para revisão.' : '';
     switch (s.estado) {
       case 'nunca': return 'Nenhuma verificação feita ainda.';
-      case 'na_fila': return 'Na fila, começando em instantes…';
+      case 'na_fila': return 'Começando…';
       case 'rodando': return s.etapa || 'Verificando…';
       case 'ok': return (s.mensagem || 'Base atualizada.') + fim + aviso;
       case 'sem_novidade': return (s.mensagem || 'Nenhuma edição nova.') + fim;
+      case 'parcial': return (s.mensagem || 'O tempo acabou no meio da verificação. Aperte o botão de novo para continuar.') + fim;
       case 'bloqueio': return (s.mensagem || 'O site do STJ recusou o pedido.') + fim;
       default: return (s.mensagem || 'A verificação não terminou.') + fim;
     }
@@ -724,20 +725,23 @@
     const emAndamento = s.motivo === 'em_andamento';
     if (s.motivo === 'espera' && s.proxima_verificacao_em) texto += ' Nova verificação a partir de ' + dataHora(s.proxima_verificacao_em) + '.';
     statusEl.textContent = texto;
-    btnUpdate.disabled = !s.pode_verificar;
-    btnUpdate.textContent = emAndamento ? 'Verificando…' : 'Verificar agora';
+    btnUpdate.disabled = enviando || !s.pode_verificar;
+    btnUpdate.textContent = (emAndamento || enviando) ? 'Verificando…' : (s.estado === 'parcial' ? 'Continuar verificação' : 'Verificar agora');
     btnUpdate.title = s.pode_verificar ? '' : (emAndamento ? 'Há uma verificação em andamento' : 'Aguarde o fim do período de espera');
     return emAndamento;
   }
 
-  async function acompanhar() {
+  async function acompanhar(atraso = 0) {
     if (acompanhando) return;
     acompanhando = true;
     try {
-      for (let i = 0; i < 240; i++) {                    // até uns 12 minutos, de 3 em 3 segundos
+      if (atraso) await new Promise(r => setTimeout(r, atraso));
+      for (let i = 0; i < 60; i++) {                     // até uns 3 minutos, de 3 em 3 segundos
         const s = await chamar('/atualizar/status');
-        if (!mostrarStatus(s)) {
-          if (s.estado === 'ok') carregarMeta();            // a base mudou: atualiza os números da página
+        if (enviando) {
+          if (s.motivo === 'em_andamento') mostrarStatus(s);   // durante o pedido, só mostra o andamento
+        } else if (!mostrarStatus(s)) {
+          if (s.estado === 'ok' || s.estado === 'parcial') carregarMeta();   // a base mudou: atualiza os números
           return;
         }
         await new Promise(r => setTimeout(r, 3000));
@@ -748,15 +752,22 @@
   }
 
   btnUpdate.addEventListener('click', async () => {
+    enviando = true;
     btnUpdate.disabled = true;
-    statusEl.textContent = 'Enviando o pedido…';
+    btnUpdate.textContent = 'Verificando…';
+    statusEl.textContent = 'Verificando… pode levar até 40 segundos.';
+    acompanhar(2500);                                    // mostra o andamento enquanto o pedido está aberto
     try {
       const { status, corpo } = await enviar('/atualizar', 'POST');
-      if (corpo && corpo.estado) { mostrarStatus(corpo); acompanhar(); }
-      else throw new Error('HTTP ' + status);
+      enviando = false;
+      if (corpo && corpo.estado) {
+        mostrarStatus(corpo);
+        if (corpo.estado === 'ok' || corpo.estado === 'parcial') carregarMeta();
+      } else throw new Error('HTTP ' + status);
     } catch (e) {
-      statusEl.textContent = 'Não foi possível iniciar a verificação agora. Tente de novo em instantes.';
-      btnUpdate.disabled = false;
+      enviando = false;
+      statusEl.textContent = 'A resposta demorou mais que o esperado. Conferindo o andamento…';
+      acompanhar();                                      // se travou, o botão libera sozinho em até 2 minutos
     }
   });
 

@@ -11,7 +11,8 @@ Rotas (todas GET):
         q=plano de saude                    (opcional, todas as palavras precisam aparecer)
         pagina=1  tamanho=20                (tamanho máximo 50)
   /api/julgados/{edicao}/{id}     um julgado completo, com o inteiro teor
-  POST /api/atualizar             pede uma verificação de edições novas (202 | 409 em andamento | 429 em espera)
+  POST /api/atualizar             roda a verificação de edições novas e responde com o resultado
+                                  (200 | 409 em andamento | 429 em espera); leva até ~35 s
   GET  /api/atualizar/status      andamento e resultado da última verificação
 """
 import json
@@ -166,22 +167,23 @@ def julgado(req: func.HttpRequest) -> func.HttpResponse:
         return resposta({"erro": "falha ao consultar a base"}, 500)
 
 
-def enfileirar():
-    """Põe a mensagem que dispara a Function de ingestão (fila na Storage Account)."""
-    from azure.storage.queue import QueueClient
-    fila = QueueClient.from_connection_string(os.environ["STORAGE_CONNECTION_STRING"],
-                                              os.environ.get("FILA_ATUALIZACAO", "fila-atualizacao"))
-    fila.send_message("verificar")
+ORCAMENTO_S = float(os.environ.get("ORCAMENTO_ATUALIZACAO_S", "35"))   # a API do Static Web App corta em ~45 s
+
+
+def executar():
+    """Roda a atualização dentro desta requisição, parando antes do limite de tempo (estado "parcial")."""
+    from job import executar_job          # importado aqui: pdfplumber só carrega quando alguém aperta o botão
+    return executar_job(container(), orcamento_s=ORCAMENTO_S)
 
 
 @app.route(route="atualizar", methods=["POST"])
 def atualizar(req: func.HttpRequest) -> func.HttpResponse:
     try:
-        status, corpo = verificacao.solicitar_verificacao(container(), enfileirar)
+        status, corpo = verificacao.solicitar_verificacao(container(), executar)
         return resposta(corpo, status)
     except Exception:
         logging.exception("atualizar")
-        return resposta({"erro": "não foi possível iniciar a verificação"}, 500)
+        return resposta({"erro": "não foi possível concluir a verificação"}, 500)
 
 
 @app.route(route="atualizar/status", methods=["GET"])

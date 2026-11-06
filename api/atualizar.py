@@ -1,15 +1,18 @@
 """
 Atualização da base: acha as edições novas do Informativo no STJ, extrai e grava no Cosmos DB.
 
-É o "miolo" da Function de ingestão (ingestao/function_app.py chama atualizar()). Fica separado de
-propósito: não conhece fila, HTTP nem Azure Functions, então roda e é testado sozinho.
+É o "miolo" da atualização (job.executar_job() chama atualizar(), e a API em api/function_app.py chama o job).
+Fica separado de propósito: não conhece HTTP nem Azure Functions, então roda e é testado sozinho.
 
 Por edição, nesta ordem: lê o PDF -> confere a contagem -> grava os julgados -> atualiza o `meta`.
 O `meta` é atualizado a cada edição, então se o processo cair no meio, a próxima execução continua de onde parou.
 Uma edição com algo estranho é gravada mesmo assim e marcada em `edicoes_a_revisar` (com o motivo em `revisar_motivos`).
 
+Limite de tempo: a API do Static Web App corta a chamada em ~45 s. Com `orcamento_s`, a atualização não começa
+uma edição que provavelmente passaria do orçamento: para com estado "parcial" e basta chamar de novo.
+
 Uso local (precisa de COSMOS_CONNECTION_STRING):
-    python ingestao/atualizar.py
+    python api/atualizar.py
 """
 import json
 import os
@@ -18,11 +21,12 @@ import time
 from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from baixar_informativos import BloqueioSTJ, USER_AGENT, novas_edicoes  # noqa: E402
+from baixar_informativos import BloqueioSTJ, TempoEsgotado, USER_AGENT, novas_edicoes  # noqa: E402
 from extrator_informativos import ler_pdf_detalhado  # noqa: E402
 from registro_julgado import META_ID, META_PARTICAO, montar_docs, sem_repetidos  # noqa: E402
 
 VERSAO_PARSER = "pdf-2026-10"
+MARGEM_ESTIMATIVA = 1.3      # a próxima edição pode demorar 30% mais que a mais demorada até agora
 
 
 def agora():
@@ -100,14 +104,20 @@ def registrar_edicao(container, meta, edicao, problemas, ja_existia=False):
     tentar(container.upsert_item, meta)
 
 
-def atualizar(container, sessao=None, novas=novas_edicoes, ler=ler_pdf_detalhado, progresso=None):
+def atualizar(container, sessao=None, novas=novas_edicoes, ler=ler_pdf_detalhado, progresso=None,
+              orcamento_s=None, relogio=time.monotonic):
     """Procura edições novas e grava. Devolve um dict para o job mostrar na tela:
 
-        estado: "ok" (tinha edição nova) | "sem_novidade" | "bloqueio" (STJ recusou; o que veio fica gravado) | "erro"
+        estado: "ok" (tinha edição nova) | "sem_novidade" | "parcial" (acabou o tempo; chame de novo para continuar)
+                | "bloqueio" (STJ recusou; o que veio fica gravado) | "erro"
         edicoes_novas, julgados_novos, a_revisar (edição -> motivos), mensagem
+
+    orcamento_s: segundos que esta chamada pode usar. Antes de começar cada edição depois da primeira, confere se
+    ainda dá tempo (estimativa: a edição mais demorada até ali, com margem); se não der, para com "parcial".
     """
     progresso = progresso or (lambda texto: None)
     resultado = {"estado": "sem_novidade", "edicoes_novas": [], "julgados_novos": 0, "a_revisar": {}, "mensagem": ""}
+    inicio = relogio()
 
     meta = ler_meta(container)
     if not meta or not meta.get("ultima_edicao"):
@@ -122,8 +132,21 @@ def atualizar(container, sessao=None, novas=novas_edicoes, ler=ler_pdf_detalhado
 
     progresso(f"Procurando edições depois da {ultima:04d}…")
     edicao = None
+    parou_por_tempo = False
+    extra = {} if orcamento_s is None else {"prazo": inicio + orcamento_s}   # limite também para esperas de rede
     try:
-        for edicao, pdf in novas(sessao, ultima):
+        iterador = iter(novas(sessao, ultima, **extra))
+        maior_custo = 0.0                                                       # segundos da edição mais demorada
+        while True:
+            if (orcamento_s is not None and resultado["edicoes_novas"]
+                    and relogio() - inicio + maior_custo * MARGEM_ESTIMATIVA > orcamento_s):
+                parou_por_tempo = True
+                break
+            comeco = relogio()
+            try:
+                edicao, pdf = next(iterador)
+            except StopIteration:
+                break
             progresso(f"Edição {edicao}: lendo o PDF…")
             blocos, n_processo_pdf = ler(pdf)
             problemas = problemas_da_edicao(blocos, n_processo_pdf)
@@ -135,20 +158,34 @@ def atualizar(container, sessao=None, novas=novas_edicoes, ler=ler_pdf_detalhado
             resultado["julgados_novos"] += len(docs)
             if problemas:
                 resultado["a_revisar"][edicao] = problemas
+            maior_custo = max(maior_custo, relogio() - comeco)
     except BloqueioSTJ as erro:
         resultado.update(estado="bloqueio", mensagem=f"O site do STJ recusou o pedido ({erro}). Tente de novo mais tarde.")
+    except TempoEsgotado:
+        parou_por_tempo = True
     except Exception as erro:   # falha numa edição: para aqui; o que já foi gravado fica e a próxima execução continua
         resultado.update(estado="erro", mensagem=f"Falha na edição {edicao}: {type(erro).__name__}: {erro}")
-    else:
-        resultado["estado"] = "ok" if resultado["edicoes_novas"] else "sem_novidade"
+
+    if resultado["estado"] not in ("bloqueio", "erro"):
+        if parou_por_tempo:
+            resultado["estado"] = "parcial"
+        else:
+            resultado["estado"] = "ok" if resultado["edicoes_novas"] else "sem_novidade"
 
     if not resultado["edicoes_novas"] or resultado["estado"] != "ok":
         meta["ultima_verificacao"] = agora()      # registra que a verificação aconteceu, mesmo sem novidade
         tentar(container.upsert_item, meta)
+    novas_txt = ", ".join(resultado["edicoes_novas"])
     if resultado["estado"] == "ok":
         n = len(resultado["edicoes_novas"])
-        resultado["mensagem"] = (f"{n} edição(ões) nova(s): {', '.join(resultado['edicoes_novas'])}; "
-                                 f"{resultado['julgados_novos']} julgados.")
+        resultado["mensagem"] = f"{n} edição(ões) nova(s): {novas_txt}; {resultado['julgados_novos']} julgados."
+    elif resultado["estado"] == "parcial":
+        if resultado["edicoes_novas"]:
+            resultado["mensagem"] = (f"Gravei {novas_txt} ({resultado['julgados_novos']} julgados), mas o tempo desta "
+                                     f"chamada acabou. Aperte o botão de novo para continuar.")
+        else:
+            resultado["mensagem"] = ("O site do STJ demorou a responder e o tempo desta chamada acabou. "
+                                     "Aperte o botão de novo.")
     elif resultado["estado"] == "sem_novidade":
         resultado["mensagem"] = "Nenhuma edição nova no site do STJ."
     return resultado

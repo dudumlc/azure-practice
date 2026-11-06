@@ -1,11 +1,11 @@
 """
 Regras do botão "Verificar agora" (sem dependência de Azure Functions, para poder ser testado sozinho).
 
-  solicitar_verificacao(): decide se a verificação pode começar; se puder, cria o job "na_fila" e enfileira.
+  solicitar_verificacao(): decide se a verificação pode começar; se puder, cria o job "na_fila", executa e devolve o resultado.
   estado_da_verificacao(): o que a tela mostra (andamento, resultado, se o botão está liberado).
 
-O documento "job" (id "job", partição "_meta") é o mesmo que a Function de ingestão atualiza.
-A espera entre verificações vem de job["proxima_verificacao_em"], calculada pela Function ao terminar.
+O documento "job" (id "job", partição "_meta") é o mesmo que job.executar_job() atualiza.
+A espera entre verificações vem de job["proxima_verificacao_em"], calculada por ele ao terminar.
 """
 from datetime import datetime, timedelta, timezone
 
@@ -14,7 +14,7 @@ from azure.cosmos import exceptions
 
 JOB_ID = "job"
 JOB_PARTICAO = "_meta"
-TRAVA_FILA = timedelta(minutes=15)       # "na fila" ou "rodando" há mais que isso = travado, deixa tentar de novo
+TRAVA_FILA = timedelta(minutes=2)        # "na fila" ou "rodando" há mais que isso = travado (a API corta em ~45 s)
 CAMPOS_PUBLICOS = ("estado", "criado_em", "iniciado_em", "finalizado_em", "etapa", "mensagem", "resultado",
                    "proxima_verificacao_em")
 
@@ -67,8 +67,12 @@ def estado_da_verificacao(container, momento=None):
     return _publico(ler_job(container), momento)
 
 
-def solicitar_verificacao(container, enfileirar, momento=None):
-    """-> (status HTTP, corpo). 202 = enfileirada; 409 = já em andamento; 429 = dentro do período de espera."""
+def solicitar_verificacao(container, executar, momento=None):
+    """-> (status HTTP, corpo). 200 = a verificação rodou (veja corpo["estado"]); 409 = já em andamento;
+    429 = dentro do período de espera.
+
+    `executar` roda a atualização de verdade (job.executar_job) e devolve o job final."""
+    momento_dado = momento
     momento = momento or agora()
     job = ler_job(container)
     atual = _publico(job, momento)
@@ -76,7 +80,7 @@ def solicitar_verificacao(container, enfileirar, momento=None):
         return (409 if atual["motivo"] == "em_andamento" else 429), atual
 
     novo = {"id": JOB_ID, "edicao": JOB_PARTICAO, "estado": "na_fila", "criado_em": iso(momento),
-            "iniciado_em": None, "finalizado_em": None, "etapa": "Na fila…", "mensagem": "", "resultado": None,
+            "iniciado_em": None, "finalizado_em": None, "etapa": "Começando…", "mensagem": "", "resultado": None,
             "proxima_verificacao_em": None}
     try:
         if job is None:
@@ -89,11 +93,12 @@ def solicitar_verificacao(container, enfileirar, momento=None):
         raise
 
     try:
-        enfileirar()
+        final = executar() or ler_job(container)
     except Exception:
-        # não conseguiu enfileirar: não deixa o job preso e libera o botão de novo
-        container.upsert_item({**novo, "estado": "erro", "etapa": "", "finalizado_em": iso(momento),
-                               "mensagem": "Não foi possível iniciar a verificação. Tente de novo.",
-                               "proxima_verificacao_em": iso(momento)})
+        # não conseguiu rodar: não deixa o job preso e libera o botão de novo
+        fim = momento_dado or agora()
+        container.upsert_item({**novo, "estado": "erro", "etapa": "", "finalizado_em": iso(fim),
+                               "mensagem": "A verificação não terminou. Tente de novo.",
+                               "proxima_verificacao_em": iso(fim)})
         raise
-    return 202, _publico(novo, momento)
+    return 200, _publico(final, momento_dado or agora())
