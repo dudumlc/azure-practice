@@ -11,6 +11,8 @@ Rotas (todas GET):
         q=plano de saude                    (opcional, todas as palavras precisam aparecer)
         pagina=1  tamanho=20                (tamanho máximo 50)
   /api/julgados/{edicao}/{id}     um julgado completo, com o inteiro teor
+  POST /api/busca                 busca por descrição (vetores): corpo {"descricao": "...", "ramos": [...], "secoes": [...]};
+                                  devolve os 20 julgados mais parecidos (400 | 429 limite | 503 indisponível)
   POST /api/atualizar             roda a verificação de edições novas e responde com o resultado
                                   (200 | 409 em andamento | 429 em espera); leva até ~35 s
   GET  /api/atualizar/status      andamento e resultado da última verificação
@@ -25,6 +27,7 @@ from collections import Counter
 import azure.functions as func
 from azure.cosmos import CosmosClient, exceptions
 
+import busca_semantica
 import verificacao
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
@@ -53,9 +56,9 @@ def normalizar(texto):
     return "".join(c for c in unicodedata.normalize("NFD", texto.lower()) if unicodedata.category(c) != "Mn")
 
 
-def resposta(corpo, status=200):
+def resposta(corpo, status=200, cabecalhos=None):
     return func.HttpResponse(json.dumps(corpo, ensure_ascii=False), status_code=status,
-                             mimetype="application/json", headers={"Cache-Control": "no-store"})
+                             mimetype="application/json", headers={"Cache-Control": "no-store", **(cabecalhos or {})})
 
 
 def montar_filtro(ramos, secoes, termo):
@@ -165,6 +168,43 @@ def julgado(req: func.HttpRequest) -> func.HttpResponse:
     except Exception:
         logging.exception("julgado")
         return resposta({"erro": "falha ao consultar a base"}, 500)
+
+
+_limite_pessoa = busca_semantica.LimitePorPessoa()
+_cache_vetores = busca_semantica.CacheDeVetores()
+BUSCAS_POR_DIA = int(os.environ.get("BUSCAS_POR_DIA", busca_semantica.BUSCAS_POR_DIA))
+
+
+def quem_pediu(req):
+    """IP de quem fez o pedido (o Static Web App manda no cabeçalho x-forwarded-for, às vezes com a porta)."""
+    ip = req.headers.get("x-forwarded-for", "").split(",")[0].strip()
+    return ip.rsplit(":", 1)[0] if ip.count(":") == 1 else (ip or "desconhecido")
+
+
+def lista_de_textos(valor, maximo=20):
+    return [str(v).strip()[:120] for v in valor[:maximo] if str(v).strip()] if isinstance(valor, list) else []
+
+
+@app.route(route="busca", methods=["POST"])
+def busca(req: func.HttpRequest) -> func.HttpResponse:
+    try:
+        try:
+            corpo = req.get_json()
+        except ValueError:
+            corpo = None
+        if not isinstance(corpo, dict):
+            return resposta({"erro": "Pedido inválido."}, 400)
+        where, params = montar_filtro(lista_de_textos(corpo.get("ramos")), lista_de_textos(corpo.get("secoes")), "")
+        dados = busca_semantica.buscar(container(), corpo.get("descricao"), where, params,
+                                       os.environ.get("GEMINI_API_KEY"), quem_pediu(req),
+                                       _limite_pessoa, _cache_vetores, teto_dia=BUSCAS_POR_DIA)
+        return resposta(dados)
+    except busca_semantica.BuscaRecusada as erro:
+        cab = {"Retry-After": str(erro.depois_s)} if erro.depois_s else None
+        return resposta({"erro": erro.mensagem}, erro.status, cab)
+    except Exception:
+        logging.exception("busca")
+        return resposta({"erro": busca_semantica.MSG_INDISPONIVEL}, 500)
 
 
 ORCAMENTO_S = float(os.environ.get("ORCAMENTO_ATUALIZACAO_S", "35"))   # a API do Static Web App corta em ~45 s

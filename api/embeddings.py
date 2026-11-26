@@ -36,17 +36,18 @@ def normalizar_vetor(v):
 
 
 def embutir(textos, tipo, chave_api, sessao=requests, esperar=time.sleep, progresso=print,
-            ao_terminar_lote=None, lote=LOTE, pausa=PAUSA_ENTRE_LOTES):
+            ao_terminar_lote=None, lote=LOTE, pausa=PAUSA_ENTRE_LOTES, tentativas=7, timeout=120):
     """Vetoriza `textos` (tipo: RETRIEVAL_DOCUMENT para julgados, RETRIEVAL_QUERY para a busca).
 
-    ao_terminar_lote(textos_do_lote, vetores_do_lote) é chamado a cada lote pronto (para salvar o progresso)."""
+    ao_terminar_lote(textos_do_lote, vetores_do_lote) é chamado a cada lote pronto (para salvar o progresso).
+    `tentativas` e `timeout` menores servem a busca do site, que não pode esperar minutos pelo Gemini."""
     vetores = []
     for ini in range(0, len(textos), lote):
         parte = textos[ini:ini + lote]
         corpo = {"requests": [{"model": f"models/{MODELO}", "content": {"parts": [{"text": t}]},
                                "taskType": tipo, "outputDimensionality": DIMENSOES} for t in parte]}
-        for tentativa in range(1, 8):
-            r = sessao.post(URL, json=corpo, headers={"x-goog-api-key": chave_api}, timeout=120)
+        for tentativa in range(1, tentativas + 1):
+            r = sessao.post(URL, json=corpo, headers={"x-goog-api-key": chave_api}, timeout=timeout)
             if r.status_code == 200:
                 novos = [normalizar_vetor(e["values"]) for e in r.json()["embeddings"]]
                 vetores += novos
@@ -55,7 +56,7 @@ def embutir(textos, tipo, chave_api, sessao=requests, esperar=time.sleep, progre
                 break
             if r.status_code == 429 and ("PerDay" in r.text or "per day" in r.text.lower()):
                 raise CotaEsgotada("limite diário do plano gratuito atingido")
-            if r.status_code in (429, 500, 503) and tentativa < 7:
+            if r.status_code in (429, 500, 503) and tentativa < tentativas:
                 espera = min(15 * tentativa, 70)
                 progresso(f"  Gemini respondeu {r.status_code} (limite de uso); esperando {espera}s…")
                 esperar(espera)

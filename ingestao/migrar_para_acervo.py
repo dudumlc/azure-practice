@@ -110,10 +110,14 @@ def copiar(origem, destino, cache, dry_run=False, progresso=print):
 
 
 def contagens(container):
+    # GROUP BY entre partições não é aceito pelo Cosmos nesse formato: traz só o campo e conta aqui
     linhas = tentar(lambda: list(container.query_items(
-        'SELECT c.tipo, COUNT(1) AS n FROM c WHERE c.id != "job" GROUP BY c.tipo',
-        enable_cross_partition_query=True)))
-    return {l.get("tipo", "(sem tipo)"): l["n"] for l in linhas}
+        'SELECT c.tipo FROM c WHERE c.id != "job"', enable_cross_partition_query=True)))
+    cont = {}
+    for l in linhas:
+        t = l.get("tipo", "(sem tipo)")
+        cont[t] = cont.get(t, 0) + 1
+    return cont
 
 
 def testar_busca_vetorial(destino):
@@ -175,9 +179,14 @@ if __name__ == "__main__":
 
     a, b = contagens(origem), contagens(destino)
     print(f"Contagem por tipo — origem: {a} | destino: {b}")
-    if a != b:
-        sys.exit("ATENÇÃO: as contagens são diferentes. Rode o script de novo (ele copia só o que falta).")
-    print("Contagens iguais.")
+    faltam = {t: n - b.get(t, 0) for t, n in a.items() if n > b.get(t, 0)}
+    if faltam:
+        sys.exit(f"ATENÇÃO: faltam documentos no destino {faltam}. Rode o script de novo (ele copia só o que falta).")
+    if a == b:
+        print("Contagens iguais.")
+    else:   # depois da troca do app, as edições novas entram direto no acervo: ele pode ter mais que a origem
+        print(f"Nada falta no destino; ele tem a mais (edições novas gravadas direto nele): "
+              f"{ {t: b[t] - a.get(t, 0) for t in b if b[t] > a.get(t, 0)} }.")
     teste = testar_busca_vetorial(destino)
     if teste is None:
         print("Busca vetorial: sem vetores no destino para testar (normal se o cache estava vazio).")

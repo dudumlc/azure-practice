@@ -98,6 +98,16 @@ def testa_erro_de_chave_levanta():
     raise AssertionError("devia levantar ErroGemini")
 
 
+def testa_poucas_tentativas_para_a_busca_do_site():
+    gem = GeminiFalso(falhas=[Resp(429, texto="rate limit per minute")] * 5)
+    try:
+        e.embutir(["a"], "RETRIEVAL_QUERY", "chave", sessao=gem, esperar=calado, progresso=calado, tentativas=2, timeout=15)
+    except e.CotaEsgotada:
+        assert gem.chamadas == 2                       # desistiu na 2ª, sem esperar minutos
+        return
+    raise AssertionError("devia levantar CotaEsgotada")
+
+
 def testa_gera_so_o_que_falta():
     c = base()
     r = g.gerar(c, "chave", lote=2, pausa=0, sessao=GeminiFalso(), esperar=calado, progresso=calado)

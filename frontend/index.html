@@ -186,6 +186,9 @@
     }
     .composer textarea::placeholder { color: #8a979c; }
     .composer-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 8px 10px 10px 18px; }
+    .composer-foot .dica { font-size: 13px; color: var(--muted); }
+    .composer-foot .btn { margin-left: auto; }
+    @media (max-width: 900px) { .composer-foot .dica { display: none; } }
     .seg { display: inline-flex; align-items: center; gap: 10px; font-size: 14px; color: var(--muted); }
     .seg-opts { display: inline-flex; background: var(--paper); border-radius: 9px; padding: 3px; }
     .seg-opts button { background: none; border: 0; border-radius: 7px; padding: 4px 12px; color: var(--muted); }
@@ -360,14 +363,16 @@
         <p>Conte com suas palavras o que você procura. Os julgados mais próximos do sentido do texto aparecem primeiro.</p>
       </header>
 
-      <div class="composer off" aria-hidden="true">
-        <textarea rows="3" tabindex="-1" disabled placeholder="Exemplo: o Fisco pode rever o valor declarado das quotas de uma empresa quando ela recebe imóveis em herança?"></textarea>
-        <div class="composer-foot"><span></span><button class="btn" type="button" tabindex="-1" disabled>Buscar julgados</button></div>
-      </div>
+      <form class="composer" id="form2">
+        <textarea id="q2" rows="3" maxlength="500" aria-label="Descrição do que você procura" placeholder="Exemplo: o Fisco pode rever o valor declarado das quotas de uma empresa quando ela recebe imóveis em herança?"></textarea>
+        <div class="composer-foot"><span class="dica">Enter busca · Shift+Enter pula a linha</span><button class="btn" type="submit" id="btn-busca2">Buscar julgados</button></div>
+      </form>
 
-      <div class="soon">
-        <strong>Disponível em uma próxima etapa</strong>
-        Esta busca depende da IA que compara o sentido do texto. Por enquanto, use a busca por filtros na primeira tela.
+      <div class="results-bar" id="bar2" aria-live="polite">Descreva o que procura e aperte “Buscar julgados”.</div>
+
+      <div class="split" id="split2">
+        <ul class="list" id="list2"></ul>
+        <article class="reader" id="reader2" aria-live="polite"></article>
       </div>
     </section>
 
@@ -386,14 +391,14 @@
           <div><dt>Edições na base</dt><dd id="m-edicoes">...</dd></div>
           <div><dt>Fonte dos dados</dt><dd id="m-fonte">...</dd></div>
           <div><dt>IA</dt><dd id="m-ia">...</dd></div>
-          <div><dt>Versão do app</dt><dd>0.3, busca por filtros e verificação de edições novas</dd></div>
+          <div><dt>Versão do app</dt><dd>0.4, busca por filtros, busca por descrição e verificação de edições novas</dd></div>
         </dl>
 
         <h2>Como funciona</h2>
         <ol class="flow">
           <li><strong>Coleta</strong><p>O app consulta a fonte e traz os julgados novos com tese, tema e processo.</p></li>
-          <li><strong>Resumo e indexação</strong><p>Em uma próxima etapa, a IA resume cada julgado e registra o sentido do texto para permitir a busca por descrição.</p></li>
-          <li><strong>Busca</strong><p>Na primeira tela, filtros por ramo e palavras do tema. A busca por proximidade de sentido virá depois.</p></li>
+          <li><strong>Indexação</strong><p>Um modelo de IA registra o sentido do tema e da tese de cada julgado, em forma de números, para permitir a busca por descrição.</p></li>
+          <li><strong>Busca</strong><p>Na primeira tela, filtros por ramo, seção e palavras do tema. Na segunda, você descreve o caso com suas palavras e os julgados de sentido mais próximo aparecem primeiro.</p></li>
         </ol>
 
         <h2>Atualizar a base</h2>
@@ -473,6 +478,10 @@
   /* ---------- Tela 1 ---------- */
   const S = { ramos: new Set(), secoes: new Set(), palavras: [], termo: '', pagina: 1, total: 0, itens: [], sel: -1, token: 0, completos: new Map() };
   const list = $('list1'), reader = $('reader1'), split = $('split1'), bar = $('bar1');
+  /* Cada tela de resultados tem o seu contexto (estado + elementos); as funções de lista e leitura servem às duas */
+  const T1 = { S, list, reader, split, bar };
+  const S2 = { itens: [], sel: -1, palavras: [], total: 0, token: 0, completos: S.completos };
+  const T2 = { S: S2, list: $('list2'), reader: $('reader2'), split: $('split2'), bar: $('bar2') };
 
   /* ---------- Filtros em lista suspensa: busca dentro da lista, ordem alfabética, vários itens ---------- */
   const FILTROS = {
@@ -555,22 +564,23 @@
   document.addEventListener('click', e => { if (!e.target.closest('.dd')) fecharFiltros(); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape') fecharFiltros(); });
 
-  function desenharLista() {
-    if (!S.itens.length) { list.innerHTML = ''; return; }
-    list.innerHTML = S.itens.map((it, i) => {
+  function desenharLista(T = T1) {
+    const E = T.S;
+    if (!E.itens.length) { T.list.innerHTML = ''; return; }
+    T.list.innerHTML = E.itens.map((it, i) => {
       const extra = it.ramos.length > 1 ? `<span class="badge more">+${it.ramos.length - 1}</span>` : '';
-      return `<li><button class="item" data-i="${i}" aria-current="${i === S.sel}">
+      return `<li><button class="item" data-i="${i}" aria-current="${i === E.sel}">
         <div class="item-top"><span class="badges"><span class="badge">${html(titulo(it.ramos[0] || ''))}</span>${extra}</span></div>
-        <p class="item-tese">${destacar(it.destaque || it.tema, S.palavras)}</p>
+        <p class="item-tese">${destacar(it.destaque || it.tema, E.palavras)}</p>
         <span class="item-proc">${html(dadosProcesso(it.processo).principal)} · Informativo ${html(it.edicao)}</span>
       </button></li>`;
-    }).join('') + (S.itens.length < S.total
+    }).join('') + (E.itens.length < E.total
       ? `<li class="more-wrap"><button class="btn ghost" type="button" id="mais">Carregar mais</button></li>` : '');
   }
 
-  function mensagem(texto, erro) {
-    list.innerHTML = `<li class="state${erro ? ' err' : ''}">${html(texto)}</li>`;
-    reader.innerHTML = '';
+  function mensagem(texto, erro, T = T1) {
+    T.list.innerHTML = `<li class="state${erro ? ' err' : ''}">${html(texto)}</li>`;
+    T.reader.innerHTML = '';
   }
 
   async function buscar(reiniciar) {
@@ -600,7 +610,7 @@
     }
   }
 
-  function leitor(it, teor) {
+  function leitor(it, teor, palavras) {
     const d = dadosProcesso(it.processo);
     const fato = (rotulo, valor) => valor ? `<div><dt>${rotulo}</dt><dd>${valor}</dd></div>` : '';
     const link = it.link ? `<a href="${html(it.link)}" target="_blank" rel="noopener">Informativo ${html(it.edicao)}</a>` : html(it.edicao);
@@ -611,35 +621,35 @@
       <dl class="facts">
         ${fato('Seção do informativo', html(titulo(it.secao || '')))}${fato('Órgão julgador', html(d.orgao))}${fato('Relator', html(d.relator))}${fato('Julgamento', html(d.julgamento))}${fato('Publicado em', link)}
       </dl>
-      ${it.destaque ? `<h3>Tese</h3><p class="tese">${destacar(it.destaque, S.palavras)}</p>` : ''}
+      ${it.destaque ? `<h3>Tese</h3><p class="tese">${destacar(it.destaque, palavras)}</p>` : ''}
       <h3>Tema</h3>
-      <p class="tema">${destacar(it.tema, S.palavras)}</p>
+      <p class="tema">${destacar(it.tema, palavras)}</p>
       <h3>Processo</h3>
       <p class="proc">${html(it.processo)}</p>
       ${it.resumo_ia ? `<section class="ai"><h3>Resumo gerado por IA</h3><p>${html(it.resumo_ia)}</p></section>` : ''}
       <div id="teor-slot">${teor === undefined ? '<details><summary>Carregando inteiro teor…</summary></details>'
-        : teor ? `<details><summary>Informações do inteiro teor</summary><p>${destacar(teor, S.palavras)}</p></details>` : ''}</div>`;
+        : teor ? `<details><summary>Informações do inteiro teor</summary><p>${destacar(teor, palavras)}</p></details>` : ''}</div>`;
   }
 
-  async function selecionar(i, abrir) {
-    const it = S.itens[i];
+  async function selecionar(i, abrir, T = T1) {
+    const E = T.S, it = E.itens[i];
     if (!it) return;
-    S.sel = i;
-    list.querySelectorAll('.item').forEach(b => b.setAttribute('aria-current', +b.dataset.i === i));
+    E.sel = i;
+    T.list.querySelectorAll('.item').forEach(b => b.setAttribute('aria-current', +b.dataset.i === i));
     const chave = it.edicao + '/' + it.id;
-    reader.innerHTML = leitor(it, S.completos.has(chave) ? S.completos.get(chave) : undefined);
-    split.classList.toggle('open', !!abrir);
-    reader.scrollTop = 0;
+    T.reader.innerHTML = leitor(it, E.completos.has(chave) ? E.completos.get(chave) : undefined, E.palavras);
+    T.split.classList.toggle('open', !!abrir);
+    T.reader.scrollTop = 0;
     if (abrir) window.scrollTo(0, 0);
-    if (S.completos.has(chave)) return;
+    if (E.completos.has(chave)) return;
     try {
       const completo = await chamar('/julgados/' + encodeURIComponent(it.edicao) + '/' + encodeURIComponent(it.id));
-      S.completos.set(chave, completo.inteiro_teor || '');
-    } catch (e) { S.completos.set(chave, ''); }
-    if (S.sel === i) {
-      const slot = $('teor-slot');
-      if (slot) slot.innerHTML = S.completos.get(chave)
-        ? `<details><summary>Informações do inteiro teor</summary><p>${destacar(S.completos.get(chave), S.palavras)}</p></details>` : '';
+      E.completos.set(chave, completo.inteiro_teor || '');
+    } catch (e) { E.completos.set(chave, ''); }
+    if (E.sel === i) {
+      const slot = T.reader.querySelector('#teor-slot');
+      if (slot) slot.innerHTML = E.completos.get(chave)
+        ? `<details><summary>Informações do inteiro teor</summary><p>${destacar(E.completos.get(chave), E.palavras)}</p></details>` : '';
     }
   }
 
@@ -652,6 +662,51 @@
     if (e.target.closest('.back')) { split.classList.remove('open'); window.scrollTo(0, 0); }
   });
   $('form1').addEventListener('submit', e => { e.preventDefault(); buscar(true); });
+
+  /* ---------- Tela 2: busca por descrição ---------- */
+  async function postar(caminho, corpo) {
+    const r = await fetch(API + caminho, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) });
+    let dados = null;
+    try { dados = await r.json(); } catch (e) { /* resposta sem JSON */ }
+    return { ok: r.ok, dados };
+  }
+
+  const btnBusca2 = $('btn-busca2');
+  async function buscarDescricao() {
+    const texto = $('q2').value.trim();
+    if (texto.length < 8) { T2.bar.textContent = 'Descreva com um pouco mais de detalhe.'; return; }
+    const meu = ++S2.token;
+    S2.itens = []; S2.sel = -1; S2.total = 0;
+    T2.split.classList.remove('open');
+    T2.bar.textContent = 'Buscando…';
+    mensagem('Buscando… isso pode levar alguns segundos.', false, T2);
+    btnBusca2.disabled = true;
+    try {
+      const { ok, dados } = await postar('/busca', { descricao: texto });
+      if (meu !== S2.token) return;
+      if (!ok) {
+        T2.bar.textContent = 'Busca indisponível';
+        return mensagem((dados && dados.erro) || 'Não foi possível buscar agora. Tente de novo em instantes.', true, T2);
+      }
+      S2.itens = dados.itens; S2.total = dados.itens.length;
+      if (!S2.itens.length) { T2.bar.textContent = 'Nenhum resultado'; return mensagem('Nenhum julgado encontrado para essa descrição.', false, T2); }
+      T2.bar.textContent = `${S2.total} julgados de sentido mais próximo do que você descreveu`;
+      desenharLista(T2);
+      if (!isMobile()) selecionar(0, false, T2);
+    } catch (e) {
+      if (meu !== S2.token) return;
+      T2.bar.textContent = 'Erro na busca';
+      mensagem('Não foi possível buscar agora. Tente de novo em instantes.', true, T2);
+    } finally { if (meu === S2.token) btnBusca2.disabled = false; }
+  }
+
+  $('form2').addEventListener('submit', e => { e.preventDefault(); buscarDescricao(); });
+  $('q2').addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); buscarDescricao(); }
+  });
+  T2.list.addEventListener('click', e => { const b = e.target.closest('.item'); if (b) selecionar(+b.dataset.i, true, T2); });
+  T2.reader.addEventListener('click', e => { if (e.target.closest('.back')) { T2.split.classList.remove('open'); window.scrollTo(0, 0); } });
+  mensagem('Os julgados mais próximos do sentido da sua descrição aparecem aqui.', false, T2);
   async function iniciar() {
     Object.keys(FILTROS).forEach(montarFiltro);
     buscar(true);
@@ -677,7 +732,7 @@
       $('m-total').textContent = m.total_julgados.toLocaleString('pt-BR');
       $('m-edicoes').textContent = `${m.total_edicoes} (até o Informativo ${m.ultima_edicao})`;
       $('m-fonte').textContent = m.fonte;
-      $('m-ia').textContent = m.modelos ? [].concat(m.modelos).join(', ') : 'Não utilizada nesta versão';
+      $('m-ia').textContent = m.modelos ? [].concat(m.modelos).join(', ') : 'Gemini (vetores da busca por descrição)';
       $('foot-data').textContent = 'Base atualizada em ' + soData(m.atualizado_em);
     } catch (e) {
       ['m-atualizado', 'm-verificado', 'm-total', 'm-edicoes', 'm-fonte', 'm-ia'].forEach(id => $(id).textContent = 'Indisponível no momento');
@@ -691,6 +746,7 @@
     navButtons.forEach(b => b.classList.toggle('active', b === btn));
     screens.forEach(s => s.classList.toggle('active', s.id === btn.dataset.target));
     window.scrollTo(0, 0);
+    if (btn.dataset.target === 'tela2' && !isMobile()) $('q2').focus();
   }));
 
   /* ---------- Botão "Verificar agora": pede à API, acompanha o andamento e mostra o resultado ---------- */
