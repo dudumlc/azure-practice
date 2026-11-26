@@ -196,5 +196,5 @@ if __name__ == "__main__":
     cs = os.environ.get("COSMOS_CONNECTION_STRING")
     if not cs:
         sys.exit("Defina COSMOS_CONNECTION_STRING.")
-    c = CosmosClient.from_connection_string(cs).get_database_client("jurisprudencia").get_container_client("julgados")
+    c = CosmosClient.from_connection_string(cs).get_database_client("jurisprudencia").get_container_client(os.environ.get("COSMOS_CONTAINER", "acervo"))
     print(json.dumps(atualizar(c, progresso=print), ensure_ascii=False, indent=2))

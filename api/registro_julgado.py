@@ -68,6 +68,9 @@ def sem_repetidos(blocos):
     return unicos
 
 
+TIPO_INFORMATIVO = "informativo-stj"     # campo `tipo` dos julgados; as súmulas terão o delas (ex.: "sumula-stf")
+
+
 def montar_docs(edicao, blocos):
     """Blocos de UMA edição -> lista de documentos. Ids estáveis (não dependem do TEMA)."""
     ocorrencias = {}
@@ -84,6 +87,7 @@ def montar_docs(edicao, blocos):
         docs.append({
             "id": hashlib.sha1(f"{edicao}|{principal}|{n}".encode()).hexdigest()[:16],
             "edicao": edicao,
+            "tipo": TIPO_INFORMATIVO,
             "processo_principal": principal,
             "processo": proc,
             "secao": str(b.get("SECAO", "")).strip(),
